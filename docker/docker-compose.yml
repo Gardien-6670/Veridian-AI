@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  mysql:
+    image: mysql:8.0
+    container_name: veridian-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    networks:
+      - veridian-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Discord Bot
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: veridian-bot
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - OXAPAY_MERCHANT_KEY=${OXAPAY_MERCHANT_KEY}
+      - OXAPAY_WEBHOOK_SECRET=${OXAPAY_WEBHOOK_SECRET}
+      - BOT_OWNER_DISCORD_ID=${BOT_OWNER_DISCORD_ID}
+      - PAYPAL_EMAIL=${PAYPAL_EMAIL}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - veridian-network
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+
+  # FastAPI Backend
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: veridian-api
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
+      - JWT_SECRET=${JWT_SECRET}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - veridian-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: veridian-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - api
+    networks:
+      - veridian-network
+    restart: unless-stopped
+
+networks:
+  veridian-network:
+    driver: bridge
+
+volumes:
+  mysql-data:

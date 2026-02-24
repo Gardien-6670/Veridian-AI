@@ -1,0 +1,12 @@
+discord.py
+mysql-connector-python
+groq
+langdetect
+aiohttp
+python-dotenv
+loguru
+fastapi
+uvicorn
+pydantic
+PyJWT
+requests

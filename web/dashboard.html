@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veridian AI — Control Panel</title>
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="assets/logo veridian ai.png">
+  <link rel="apple-touch-icon" href="assets/logo veridian ai.png">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <script src="js/i18n.js" defer></script>
+  <script src="js/dashboard.js" defer></script>
+</head>
+<body>
+
+<!-- ══ LOGIN SCREEN (Affichée si pas connecté) ═════════════════════════ -->
+<div id="login-screen" style="display:none; position:fixed; inset:0; background:var(--bg);
+     z-index:9999; flex-direction:column; align-items:center; justify-content:center; gap:20px;
+     font-family:inherit">
+  <img src="assets/logo veridian ai.png" alt="Veridian AI" style="height:52px;width:auto;margin-bottom:12px;opacity:0.8">
+  <div style="font-family:'Space Mono',monospace;font-size:22px;font-weight:700;color:var(--text);text-align:center">
+    Veridian <span style="color:var(--accent)">AI</span>
+  </div>
+  <div style="font-size:14px;color:var(--text3);font-family:'Space Mono',monospace;text-align:center">
+    Connectez-vous pour accéder au panel d'administration
+  </div>
+  <button onclick="loginWithDiscord()" style="margin-top:16px;padding:12px 32px;background:#5865F2;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:10px;transition:background 0.2s" onmouseover="this.style.background='#4752C4'" onmouseout="this.style.background='#5865F2'">
+    <svg width="18" height="14" viewBox="0 0 16 12" fill="none">
+      <path d="M13.54 1.02A13.27 13.27 0 0010.34 0c-.14.26-.3.6-.41.88a12.3 12.3 0 00-3.86 0A9.5 9.5 0 005.66 0 13.34 13.34 0 002.45 1.03C.35 4.18-.22 7.24.07 10.26a13.4 13.4 0 004.09 2.07 10.07 10.07 0 00.87-1.42 8.7 8.7 0 01-1.37-.66c.11-.08.23-.17.33-.25a9.55 9.55 0 008.02 0c.11.09.22.17.33.25a8.8 8.8 0 01-1.38.67c.25.5.54.98.87 1.42a13.35 13.35 0 004.1-2.07c.34-3.53-.57-6.57-2.39-9.25z" fill="currentColor"/>
+    </svg>
+    Se connecter avec Discord
+  </button>
+  <div style="font-size:11px;color:var(--text3);margin-top:20px;text-align:center;max-width:300px">
+    Vous serez redirigé vers Discord pour authentifier votre compte.<br>
+    Vous ne pouvez accéder qu'aux serveurs où vous êtes administrateur.
+  </div>
+</div>
+
+<!-- ══ BETA BANNER ══════════════════════════════════════ -->
+<div class="beta-banner">
+  <span class="beta-pill">BETA</span>
+  <span>0.0.1 — Version en cours de développement.</span>
+  <a href="#">Signaler un problème sur Discord →</a>
+</div>
+
+<div class="app" id="app">
+
+  <!-- ══ SIDEBAR ══════════════════════════════════════════ -->
+  <aside class="sidebar">
+
+    <!-- Logo -->
+    <a href="index.html" class="sidebar-logo">
+      <img src="assets/logo veridian ai.png" alt="Veridian AI" style="height:32px;width:auto">
+    </a>
+
+    <!-- Server selector -->
+    <div style="padding:8px 8px 0">
+      <select id="server-select" style="display:none;width:100%;padding:8px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:13px;cursor:pointer">
+        <!-- Dynamically populated by handleOAuth() -->
+      </select>
+      <div class="server-selector" id="server-selector-display">
+        <div class="server-avatar">🌿</div>
+        <div class="server-info">
+          <div class="server-name">Chargement...</div>
+          <div class="server-plan">—</div>
+        </div>
+        <svg class="server-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Nav: Main -->
+    <div class="nav-group">
+      <span class="nav-group-label">Main</span>
+
+      <div class="nav-item active" data-page="dashboard">
+        <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
+          <rect x="1" y="1" width="5" height="5" rx="1.2" fill="currentColor"/>
+          <rect x="8" y="1" width="5" height="5" rx="1.2" fill="currentColor" opacity=".5"/>
+          <rect x="1" y="8" width="5" height="5" rx="1.2" fill="currentColor" opacity=".5"/>
+          <rect x="8" y="8" width="5" height="5" rx="1.2" fill="currentColor" opacity=".5"/>
+        </svg>
+        Dashboard
+      </div>
+
+      <div class="nav-item" data-page="tickets">
+        <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
+          <path d="M2 3.5A1.5 1.5 0 013.5 2h7A1.5 1.5 0 0112 3.5v1a1 1 0 000 2v1A1.5 1.5 0 0110.5 9h-7A1.5 1.5 0 012 7.5v-1a1 1 0 000-2v-1z" fill="currentColor" opacity=".7"/>
+          <path d="M5 5.5h4" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        Tickets
+        <span class="nav-badge">12</span>
+      </div>
+
+      <div class="nav-item" data-page="orders">
+        <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
+          <rect x="1.5" y="1.5" width="11" height="11" rx="1.5" fill="currentColor" opacity=".3"/>
+          <path d="M4 5h6M4 7h4M4 9h2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        Orders
+        <span class="nav-badge yellow" data-badge="orders">3</span>
+      </div>
+    </div>
+
+    <div class="nav-sep"></div>
+
+    <!-- Nav: Config -->
+    <div class="nav-group">
+      <span class="nav-group-label">Config</span>
+
+      <div class="nav-item" data-page="settings">
+        <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
+          <circle cx="7" cy="7" r="2" fill="currentColor"/>
+          <path d="M7 1.5v1.2M7 11.3v1.2M1.5 7h1.2M11.3 7h1.2M3.1 3.1l.85.85M10.05 10.05l.85.85M3.1 10.9l.85-.85M10.05 3.95l.85-.85" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        Settings
+      </div>
+
+      <div class="nav-item" data-page="kb">
+        <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
+          <path d="M2.5 2h6.5l2.5 2.5V12a.5.5 0 01-.5.5h-8.5A.5.5 0 012 12V2.5A.5.5 0 012.5 2z" fill="currentColor" opacity=".4"/>
+          <path d="M9 2v2.5h2.5" fill="currentColor" opacity=".5"/>
+          <path d="M4.5 6.5h5M4.5 8.5h3.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+        </svg>
+        Knowledge Base
+      </div>
+    </div>
+
+    <!-- User -->
+    <div class="sidebar-footer">
+      <div class="user-card">
+        <img class="user-avatar-img" src="" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover">
+        <div style="flex:1;min-width:0">
+          <div class="user-name">Chargement...</div>
+          <div class="user-role">—</div>
+        </div>
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="opacity:.3;flex-shrink:0" onclick="logout()" style="cursor:pointer">
+          <path d="M4.5 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══ MAIN ═════════════════════════════════════════════ -->
+  <div class="main">
+
+    <!-- Topbar -->
+    <div class="topbar">
+      <div style="font-family:'Space Mono',monospace;font-size:11px;display:flex;align-items:center;gap:5px">
+        <span style="color:var(--text3)">veridian</span>
+        <span class="breadcrumb-sep" style="color:var(--text3)">/</span>
+        <span id="breadcrumb-page" style="color:var(--text);font-weight:700">Dashboard</span>
+      </div>
+      <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-left:12px" id="topbar-sub">Vue d'ensemble</div>
+
+      <div class="topbar-right">
+        <div class="status-indicator">
+          <div class="status-dot"></div>
+          BOT EN LIGNE
+        </div>
+        <a href="index.html" class="topbar-btn">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <path d="M1 5.5h9M5.5 1L1 5.5l4.5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Site
+        </a>
+        <button class="topbar-btn" onclick="logout()" title="Se déconnecter">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
+            <path d="M1 5.5h6M7.5 2l2.5 3.5L7.5 9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Déconnexion
+        </button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         PAGE — DASHBOARD
+    ══════════════════════════════════════════════════════════ -->
+    <div class="page-content active" id="page-dashboard">
+
+      <div class="page-header">
+        <div>
+          <div class="page-title">Dashboard</div>
+          <div class="page-sub">Lundi 23 Février 2026 · Mon Serveur Principal</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-ghost btn-sm">Exporter</button>
+          <button class="btn btn-primary btn-sm">↻ Rafraîchir</button>
+        </div>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats-row">
+        <div class="stat-card c-green">
+          <div class="stat-top">
+            <div class="stat-label">Tickets actifs</div>
+            <div class="stat-icon c-green">🎫</div>
+          </div>
+          <div class="stat-value">12</div>
+          <div class="stat-delta up">↑ +3 depuis hier</div>
+        </div>
+        <div class="stat-card c-blue">
+          <div class="stat-top">
+            <div class="stat-label">Tickets ce mois</div>
+            <div class="stat-icon c-blue">📊</div>
+          </div>
+          <div class="stat-value">248</div>
+          <div class="stat-delta up">↑ +18% vs mois dernier</div>
+        </div>
+        <div class="stat-card c-yellow">
+          <div class="stat-top">
+            <div class="stat-label">Commandes en attente</div>
+            <div class="stat-icon c-yellow">⏳</div>
+          </div>
+          <div class="stat-value">3</div>
+          <div class="stat-delta">À valider manuellement</div>
+        </div>
+        <div class="stat-card c-red">
+          <div class="stat-top">
+            <div class="stat-label">Langues détectées</div>
+            <div class="stat-icon c-red">🌐</div>
+          </div>
+          <div class="stat-value">9</div>
+          <div class="stat-delta">Ce mois — 100+ supportées</div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="grid-3-2">
+        <!-- Bar chart -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div>Tickets — 7 derniers jours</div>
+            <div class="card-meta">TICKETS / JOUR</div>
+          </div>
+          <div class="card-body">
+            <div id="bar-chart" class="bar-chart"></div>
+          </div>
+        </div>
+
+        <!-- Languages -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div>Langues</div>
+            <div class="card-meta">CE MOIS</div>
+          </div>
+          <div class="card-body">
+            <div class="progress-item">
+              <div class="progress-header">
+                <div class="progress-label">🇬🇧 Anglais</div>
+                <div class="progress-pct">42%</div>
+              </div>
+              <div class="progress-track"><div class="progress-fill" data-width="42%" style="width:0"></div></div>
+            </div>
+            <div class="progress-item">
+              <div class="progress-header">
+                <div class="progress-label">🇫🇷 Français</div>
+                <div class="progress-pct">28%</div>
+              </div>
+              <div class="progress-track"><div class="progress-fill" data-width="28%" style="width:0"></div></div>
+            </div>
+            <div class="progress-item">
+              <div class="progress-header">
+                <div class="progress-label">🇷🇺 Russe</div>
+                <div class="progress-pct">15%</div>
+              </div>
+              <div class="progress-track"><div class="progress-fill" data-width="15%" style="width:0"></div></div>
+            </div>
+            <div class="progress-item">
+              <div class="progress-header">
+                <div class="progress-label">🇩🇪 Allemand</div>
+                <div class="progress-pct">9%</div>
+              </div>
+              <div class="progress-track"><div class="progress-fill" data-width="9%" style="width:0"></div></div>
+            </div>
+            <div class="progress-item">
+              <div class="progress-header">
+                <div class="progress-label">🌐 Autres</div>
+                <div class="progress-pct">6%</div>
+              </div>
+              <div class="progress-track"><div class="progress-fill" data-width="6%" style="width:0"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Keys + Activity -->
+      <div class="grid-2">
+        <!-- API Keys -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div>Groq API — Fallback Status</div>
+            <div class="card-meta">4 CLÉS</div>
+          </div>
+          <div class="card-body">
+            <div class="key-row">
+              <div class="key-num">KEY 1</div>
+              <div class="key-details">
+                <div class="key-name">Principal — Llama 3.3 70B / Llama 4 Scout</div>
+                <div class="key-track"><div class="key-fill low" data-width="23%" style="width:0"></div></div>
+              </div>
+              <div class="key-pct">23%</div>
+              <span class="key-badge on">ACTIF</span>
+            </div>
+            <div class="key-row">
+              <div class="key-num">KEY 2</div>
+              <div class="key-details">
+                <div class="key-name">Fallback 1 — Même modèles</div>
+                <div class="key-track"><div class="key-fill low" data-width="0%" style="width:0"></div></div>
+              </div>
+              <div class="key-pct">0%</div>
+              <span class="key-badge off">STANDBY</span>
+            </div>
+            <div class="key-row">
+              <div class="key-num">KEY 3</div>
+              <div class="key-details">
+                <div class="key-name">Fallback 2 — GPT OSS 20B / Scout</div>
+                <div class="key-track"><div class="key-fill low" data-width="0%" style="width:0"></div></div>
+              </div>
+              <div class="key-pct">0%</div>
+              <span class="key-badge off">STANDBY</span>
+            </div>
+            <div class="key-row">
+              <div class="key-num">KEY 4</div>
+              <div class="key-details">
+                <div class="key-name">Fallback 3 — GPT OSS 20B / Kimi K2</div>
+                <div class="key-track"><div class="key-fill low" data-width="0%" style="width:0"></div></div>
+              </div>
+              <div class="key-pct">0%</div>
+              <span class="key-badge off">STANDBY</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div>Activité récente</div>
+            <button class="btn btn-ghost btn-sm btn-xs">Tout voir</button>
+          </div>
+          <div class="card-body">
+            <div class="activity-row">
+              <div class="activity-icon-wrap" style="background:var(--accent-dim)">🎫</div>
+              <div class="activity-text"><strong>Pavel_97</strong> a ouvert le ticket <span class="mono">#0048</span> — 🇷🇺 Russe détecté</div>
+              <div class="activity-time">2m</div>
+            </div>
+            <div class="activity-row">
+              <div class="activity-icon-wrap" style="background:var(--blue-dim)">💳</div>
+              <div class="activity-text">Commande PayPal <span class="mono">VAI-202501-4823</span> reçue — Premium</div>
+              <div class="activity-time">7m</div>
+            </div>
+            <div class="activity-row">
+              <div class="activity-icon-wrap" style="background:var(--accent-dim)">✅</div>
+              <div class="activity-text">Ticket <span class="mono">#0045</span> fermé — résumé IA généré</div>
+              <div class="activity-time">14m</div>
+            </div>
+            <div class="activity-row">
+              <div class="activity-icon-wrap" style="background:var(--yellow-dim)">🎁</div>
+              <div class="activity-text">Carte cadeau reçue — <span class="mono">VAI-202501-4821</span> en attente de validation</div>
+              <div class="activity-time">31m</div>
+            </div>
+            <div class="activity-row">
+              <div class="activity-icon-wrap" style="background:var(--blue-dim)">🌐</div>
+              <div class="activity-text">Nouvelle langue détectée : <strong>Japonais</strong> — cache initialisé</div>
+              <div class="activity-time">1h</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         PAGE — TICKETS
+    ══════════════════════════════════════════════════════════ -->
+    <div class="page-content" id="page-tickets">
+
+      <div class="page-header">
+        <div>
+          <div class="page-title">Tickets</div>
+          <div class="page-sub">12 tickets actifs · 236 fermés ce mois</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-ghost btn-sm">Filtrer</button>
+          <button class="btn btn-ghost btn-sm">Exporter CSV</button>
+        </div>
+      </div>
+
+      <!-- Quick stats -->
+      <div class="stats-row" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+        <div class="stat-card c-green" style="padding:12px 16px">
+          <div class="stat-label" style="margin-bottom:6px">Ouverts</div>
+          <div class="stat-value" style="font-size:22px">12</div>
+        </div>
+        <div class="stat-card c-yellow" style="padding:12px 16px">
+          <div class="stat-label" style="margin-bottom:6px">En attente</div>
+          <div class="stat-value" style="font-size:22px">4</div>
+        </div>
+        <div class="stat-card c-blue" style="padding:12px 16px">
+          <div class="stat-label" style="margin-bottom:6px">Fermés aujourd'hui</div>
+          <div class="stat-value" style="font-size:22px">8</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><div class="card-dot"></div>Tous les tickets</div>
+          <div class="card-meta">TRIÉS PAR DATE</div>
+        </div>
+        <div class="card-body no-pad">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Utilisateur</th>
+                <th>Langue</th>
+                <th>Priorité</th>
+                <th>Staff assigné</th>
+                <th>Statut</th>
+                <th>Ouvert</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="mono-id">#0048</span></td>
+                <td><strong style="color:var(--text)">Pavel_97</strong><br><span class="mono-grey">719284730194</span></td>
+                <td><span class="lang-chip">🇷🇺 RU</span></td>
+                <td><span class="priority-dot high">HAUTE</span></td>
+                <td>—</td>
+                <td><span class="pill open">Ouvert</span></td>
+                <td class="mono-grey">il y a 2m</td>
+                <td><button class="btn btn-ghost btn-sm">Voir</button></td>
+              </tr>
+              <tr>
+                <td><span class="mono-id">#0047</span></td>
+                <td><strong style="color:var(--text)">JohnDoe</strong><br><span class="mono-grey">483920174652</span></td>
+                <td><span class="lang-chip">🇬🇧 EN</span></td>
+                <td><span class="priority-dot mid">MOYENNE</span></td>
+                <td><span style="color:var(--text2)">@Alex</span></td>
+                <td><span class="pill open">Ouvert</span></td>
+                <td class="mono-grey">il y a 18m</td>
+                <td><button class="btn btn-ghost btn-sm">Voir</button></td>
+              </tr>
+              <tr>
+                <td><span class="mono-id">#0046</span></td>
+                <td><strong style="color:var(--text)">MarieF</strong><br><span class="mono-grey">920384756103</span></td>
+                <td><span class="lang-chip">🇫🇷 FR</span></td>
+                <td><span class="priority-dot low">BASSE</span></td>
+                <td><span style="color:var(--text2)">@Sophie</span></td>
+                <td><span class="pill pending">En attente</span></td>
+                <td class="mono-grey">il y a 45m</td>
+                <td><button class="btn btn-ghost btn-sm">Voir</button></td>
+              </tr>
+              <tr>
+                <td><span class="mono-id">#0045</span></td>
+                <td><strong style="color:var(--text)">KlausM</strong><br><span class="mono-grey">374920183746</span></td>
+                <td><span class="lang-chip">🇩🇪 DE</span></td>
+                <td><span class="priority-dot low">BASSE</span></td>
+                <td><span style="color:var(--text2)">@Alex</span></td>
+                <td><span class="pill closed">Fermé</span></td>
+                <td class="mono-grey">il y a 1h</td>
+                <td><button class="btn btn-ghost btn-sm">Transcription</button></td>
+              </tr>
+              <tr>
+                <td><span class="mono-id">#0044</span></td>
+                <td><strong style="color:var(--text)">YukiTanaka</strong><br><span class="mono-grey">582039174839</span></td>
+                <td><span class="lang-chip">🇯🇵 JA</span></td>
+                <td><span class="priority-dot mid">MOYENNE</span></td>
+                <td>—</td>
+                <td><span class="pill open">Ouvert</span></td>
+                <td class="mono-grey">il y a 2h</td>
+                <td><button class="btn btn-ghost btn-sm">Voir</button></td>
+              </tr>
+              <tr>
+                <td><span class="mono-id">#0043</span></td>
+                <td><strong style="color:var(--text)">CarlosR</strong><br><span class="mono-grey">193847562038</span></td>
+                <td><span class="lang-chip">🇪🇸 ES</span></td>
+                <td><span class="priority-dot low">BASSE</span></td>
+                <td><span style="color:var(--text2)">@Sophie</span></td>
+                <td><span class="pill closed">Fermé</span></td>
+                <td class="mono-grey">il y a 3h</td>
+                <td><button class="btn btn-ghost btn-sm">Transcription</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         PAGE — ORDERS
+    ══════════════════════════════════════════════════════════ -->
+    <div class="page-content" id="page-orders">
+
+      <div class="page-header">
+        <div>
+          <div class="page-title">Orders</div>
+          <div class="page-sub">3 commandes en attente de validation</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-ghost btn-sm">Historique</button>
+        </div>
+      </div>
+
+      <!-- Pending orders -->
+      <div class="grid-2-1">
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div>En attente</div>
+            <div class="card-meta">À VALIDER</div>
+          </div>
+          <div class="card-body" id="orders-list">
+
+            <!-- Order 1 -->
+            <div class="order-card">
+              <div class="order-method-icon paypal">💳</div>
+              <div class="order-info">
+                <div class="order-id">VAI-202501-4823</div>
+                <div class="order-user">Pavel_97 <span class="mono-grey">#719284730194</span></div>
+                <div class="order-meta">PayPal · Premium · il y a 7 min</div>
+              </div>
+              <div style="margin-right:8px;text-align:right">
+                <div class="order-amount">2.00€</div>
+                <span class="pill pending" style="font-size:9px">EN ATTENTE</span>
+              </div>
+              <div class="order-actions">
+                <button class="btn btn-primary btn-sm" onclick="validateOrder(this,'4823','paid')">✅</button>
+                <button class="btn btn-yellow btn-sm" onclick="validateOrder(this,'4823','partial')">⚠️</button>
+                <button class="btn btn-red btn-sm" onclick="validateOrder(this,'4823','rejected')">❌</button>
+              </div>
+            </div>
+
+            <!-- Order 2 -->
+            <div class="order-card">
+              <div class="order-method-icon giftcard">🎁</div>
+              <div class="order-info">
+                <div class="order-id">VAI-202501-4821</div>
+                <div class="order-user">xXShadowXx <span class="mono-grey">#987654321098</span></div>
+                <div class="order-meta">Carte cadeau · Pro · il y a 31 min</div>
+              </div>
+              <div style="margin-right:8px;text-align:right">
+                <div class="order-amount">5.00€</div>
+                <span class="pill pending" style="font-size:9px">EN ATTENTE</span>
+              </div>
+              <div class="order-actions">
+                <button class="btn btn-primary btn-sm" onclick="validateOrder(this,'4821','paid')">✅</button>
+                <button class="btn btn-yellow btn-sm" onclick="validateOrder(this,'4821','partial')">⚠️</button>
+                <button class="btn btn-red btn-sm" onclick="validateOrder(this,'4821','rejected')">❌</button>
+              </div>
+            </div>
+
+            <!-- Order 3 -->
+            <div class="order-card">
+              <div class="order-method-icon paypal">💳</div>
+              <div class="order-info">
+                <div class="order-id">VAI-202501-4819</div>
+                <div class="order-user">CoolUser42 <span class="mono-grey">#112233445566</span></div>
+                <div class="order-meta">PayPal · Premium · il y a 2h</div>
+              </div>
+              <div style="margin-right:8px;text-align:right">
+                <div class="order-amount">2.00€</div>
+                <span class="pill pending" style="font-size:9px">EN ATTENTE</span>
+              </div>
+              <div class="order-actions">
+                <button class="btn btn-primary btn-sm" onclick="validateOrder(this,'4819','paid')">✅</button>
+                <button class="btn btn-yellow btn-sm" onclick="validateOrder(this,'4819','partial')">⚠️</button>
+                <button class="btn btn-red btn-sm" onclick="validateOrder(this,'4819','rejected')">❌</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Légende boutons -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div>Actions</div>
+          </div>
+          <div class="card-body">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--surface);border-radius:8px;border:1px solid var(--border2)">
+                <div style="font-size:18px">✅</div>
+                <div>
+                  <div style="font-size:12.5px;font-weight:600;color:var(--accent)">Payé</div>
+                  <div style="font-size:11px;color:var(--text3)">Active le plan, notifie l'utilisateur en DM</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--surface);border-radius:8px;border:1px solid var(--border2)">
+                <div style="font-size:18px">⚠️</div>
+                <div>
+                  <div style="font-size:12.5px;font-weight:600;color:var(--yellow)">Montant incomplet</div>
+                  <div style="font-size:11px;color:var(--text3)">DM à l'utilisateur pour envoyer le reste</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--surface);border-radius:8px;border:1px solid var(--border2)">
+                <div style="font-size:18px">❌</div>
+                <div>
+                  <div style="font-size:12.5px;font-weight:600;color:var(--red)">Non payé / Rejeté</div>
+                  <div style="font-size:11px;color:var(--text3)">Annule la commande, notifie l'utilisateur</div>
+                </div>
+              </div>
+            </div>
+            <div style="margin-top:16px;padding:12px;background:var(--accent-dim2);border:1px solid rgba(45,255,143,0.1);border-radius:8px">
+              <div style="font-size:10px;font-family:'Space Mono',monospace;color:var(--accent);margin-bottom:6px">ℹ️ RAPPEL</div>
+              <div style="font-size:11.5px;color:var(--text2);line-height:1.5">Chaque action envoie automatiquement un DM Discord à l'utilisateur concerné via le bot.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Historique récent -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><div class="card-dot"></div>Historique récent</div>
+          <div class="card-meta">30 DERNIERS JOURS</div>
+        </div>
+        <div class="card-body no-pad">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Utilisateur</th>
+                <th>Méthode</th>
+                <th>Plan</th>
+                <th>Montant</th>
+                <th>Statut</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="mono-id">VAI-202501-4815</span></td>
+                <td>MaxPower99</td>
+                <td>🔐 OxaPay (USDT)</td>
+                <td><span class="pill pro">PRO</span></td>
+                <td class="mono-grey">5.00€</td>
+                <td><span class="pill paid">Payé</span></td>
+                <td class="mono-grey">22 Fév 2026</td>
+              </tr>
+              <tr>
+                <td><span class="mono-id">VAI-202501-4810</span></td>
+                <td>SilverWolf</td>
+                <td>💳 PayPal</td>
+                <td><span class="pill premium">PREMIUM</span></td>
+                <td class="mono-grey">2.00€</td>
+                <td><span class="pill paid">Payé</span></td>
+                <td class="mono-grey">20 Fév 2026</td>
+              </tr>
+              <tr>
+                <td><span class="mono-id">VAI-202501-4808</span></td>
+                <td>AnonUser</td>
+                <td>🎁 Carte cadeau</td>
+                <td><span class="pill premium">PREMIUM</span></td>
+                <td class="mono-grey">2.00€</td>
+                <td><span class="pill rejected">Rejeté</span></td>
+                <td class="mono-grey">19 Fév 2026</td>
+              </tr>
+              <tr>
+                <td><span class="mono-id">VAI-202501-4802</span></td>
+                <td>GamerX</td>
+                <td>🔐 OxaPay (ETH)</td>
+                <td><span class="pill pro">PRO</span></td>
+                <td class="mono-grey">5.00€</td>
+                <td><span class="pill paid">Payé</span></td>
+                <td class="mono-grey">15 Fév 2026</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         PAGE — SETTINGS
+    ══════════════════════════════════════════════════════════ -->
+    <div class="page-content" id="page-settings">
+
+      <div class="page-header">
+        <div>
+          <div class="page-title">Settings</div>
+          <div class="page-sub">Configuration du bot pour ce serveur</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary btn-sm">Sauvegarder</button>
+        </div>
+      </div>
+
+      <div class="grid-2">
+
+        <!-- Bot Config -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div>Configuration du bot</div>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Channel support public IA</label>
+              <input class="form-input" type="text" value="#support-ia" placeholder="#nom-du-channel">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Catégorie tickets</label>
+              <input class="form-input" type="text" value="Support Tickets" placeholder="Nom de la catégorie">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Rôle Staff</label>
+              <input class="form-input" type="text" value="@Staff" placeholder="@NomDuRole">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Channel de logs</label>
+              <input class="form-input" type="text" value="#logs-bot" placeholder="#nom-du-channel">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Langue par défaut du staff</label>
+              <select class="form-select">
+                <option>🇬🇧 Anglais (en)</option>
+                <option selected>🇫🇷 Français (fr)</option>
+                <option>🇩🇪 Allemand (de)</option>
+                <option>🇪🇸 Espagnol (es)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature toggles -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div>Fonctionnalités</div>
+          </div>
+          <div class="card-body">
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-name">Traduction automatique</div>
+                <div class="toggle-desc">Traduit les messages entre staff et utilisateurs</div>
+              </div>
+              <div class="toggle-switch on"></div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-name">Support public IA</div>
+                <div class="toggle-desc">Réponses automatiques dans le channel désigné</div>
+              </div>
+              <div class="toggle-switch on"></div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-name">Transcription IA</div>
+                <div class="toggle-desc">Résumé automatique à la fermeture des tickets</div>
+              </div>
+              <div class="toggle-switch on"></div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-name">Modération IA</div>
+                <div class="toggle-desc">Détection automatique de contenu inapproprié</div>
+              </div>
+              <div class="toggle-switch on"></div>
+            </div>
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-name">Suggestions staff IA</div>
+                <div class="toggle-desc">Suggestions de réponses pour les agents<br><span style="font-size:10px;color:var(--accent);font-family:'Space Mono',monospace">PRO UNIQUEMENT</span></div>
+              </div>
+              <div class="toggle-switch" style="opacity:0.4;pointer-events:none"></div>
+            </div>
+
+            <!-- Plan info -->
+            <div style="margin-top:16px;padding:12px;background:var(--blue-dim);border:1px solid rgba(77,166,255,0.15);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div>
+                <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--blue);margin-bottom:3px">PLAN ACTUEL</div>
+                <div style="font-size:13px;font-weight:700;color:var(--text)">Premium <span style="color:var(--text3);font-weight:400">— 2€/mois</span></div>
+              </div>
+              <button class="btn btn-ghost btn-sm" style="font-size:11px">Upgrader →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         PAGE — KNOWLEDGE BASE
+    ══════════════════════════════════════════════════════════ -->
+    <div class="page-content" id="page-kb">
+
+      <div class="page-header">
+        <div>
+          <div class="page-title">Knowledge Base</div>
+          <div class="page-sub">2 entrées · Plan Premium (50 max)</div>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-primary btn-sm" id="kb-add-btn">+ Ajouter une entrée</button>
+        </div>
+      </div>
+
+      <!-- Add form (hidden by default) -->
+      <div id="kb-form" style="display:none;margin-bottom:16px">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div>Nouvelle entrée</div>
+          </div>
+          <div class="card-body">
+            <div class="form-group">
+              <label class="form-label">Question</label>
+              <input class="form-input" type="text" placeholder="Ex: Comment rejoindre le serveur Minecraft ?">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Réponse</label>
+              <textarea class="form-input" rows="3" placeholder="Ex: Connecte-toi avec l'IP play.monserveur.com..." style="resize:vertical;font-family:'DM Sans',sans-serif"></textarea>
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary btn-sm">Sauvegarder</button>
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('kb-form').style.display='none'">Annuler</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KB entries -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><div class="card-dot"></div>Entrées actuelles</div>
+          <div class="card-meta">2 / 50 ENTRÉES</div>
+        </div>
+        <div class="card-body">
+          <div class="kb-item">
+            <div class="kb-question">Comment rejoindre le serveur Minecraft ?</div>
+            <div class="kb-answer">Connecte-toi avec l'IP <span style="font-family:'Space Mono',monospace;color:var(--accent)">play.monserveur.com</span> sur Java Edition 1.20+</div>
+            <div class="kb-footer">
+              <button class="btn btn-ghost btn-sm">Modifier</button>
+              <button class="btn btn-red btn-sm">Supprimer</button>
+            </div>
+          </div>
+          <div class="kb-item">
+            <div class="kb-question">Comment obtenir le rang VIP ?</div>
+            <div class="kb-answer">Utilise <span style="font-family:'Space Mono',monospace;color:var(--accent)">/pay</span> sur notre bot Discord pour accéder aux plans Premium (2€) et Pro (5€). Paiement en crypto, PayPal ou carte cadeau.</div>
+            <div class="kb-footer">
+              <button class="btn btn-ghost btn-sm">Modifier</button>
+              <button class="btn btn-red btn-sm">Supprimer</button>
+            </div>
+          </div>
+
+          <!-- Progress bar KB -->
+          <div style="margin-top:16px;padding:12px;background:var(--surface);border-radius:8px;border:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text3)">CAPACITÉ UTILISÉE</span>
+              <span style="font-size:11px;font-family:'Space Mono',monospace;color:var(--accent)">2 / 50</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" style="width:4%" data-width="4%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div><!-- .main -->
+</div><!-- .app -->
+
+<script src="js/dashboard.js"></script>
+</body>
+</html>
