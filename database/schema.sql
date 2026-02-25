@@ -258,10 +258,10 @@ VALUES (1, 0, 0, '0.2.0');
 -- Indexes supplementaires pour performance
 -- ============================================================================
 
-CREATE INDEX IF NOT EXISTS idx_vai_subscriptions_guild_active ON vai_subscriptions(guild_id, is_active);
-CREATE INDEX IF NOT EXISTS idx_vai_orders_user_status         ON vai_orders(user_id, status);
-CREATE INDEX IF NOT EXISTS idx_vai_tickets_guild_opened       ON vai_tickets(guild_id, opened_at);
-CREATE INDEX IF NOT EXISTS idx_vai_audit_created              ON vai_audit_log(created_at);
+CREATE INDEX idx_vai_subscriptions_guild_active ON vai_subscriptions(guild_id, is_active);
+CREATE INDEX idx_vai_orders_user_status         ON vai_orders(user_id, status);
+CREATE INDEX idx_vai_tickets_guild_opened       ON vai_tickets(guild_id, opened_at);
+CREATE INDEX idx_vai_audit_created              ON vai_audit_log(created_at);
 
 -- ============================================================================
 -- Vues utiles
