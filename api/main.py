@@ -22,8 +22,9 @@ ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
 # Import version
 from bot.config import VERSION
 
-# Import auth router
+# Import routers
 from api.routes.auth import router as auth_router
+from api.routes.internal import router as internal_router   # ← FIX: manquait dans l'original
 
 app = FastAPI(
     title=f"Veridian AI {VERSION} - API Interne",
@@ -49,11 +50,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include auth router
+# ============================================================================
+# Include Routers
+# ============================================================================
 app.include_router(auth_router)
+app.include_router(internal_router)   # ← FIX: routes /internal/* maintenant enregistrées
 
-# Configuration Logging
-logger.remove()  # Supprimer handler par défaut
+# ============================================================================
+# Logging
+# ============================================================================
+logger.remove()
 logger.add(
     "logs/api.log",
     rotation="500 MB",
@@ -69,11 +75,9 @@ logger.add(
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}"
 )
 
-
 # ============================================================================
-# Middleware: Vérification du secret API
+# Middleware: Vérification du secret API interne
 # ============================================================================
-
 def verify_api_secret(x_api_key: str = Header(...)):
     """Vérifie la clé API interne."""
     if x_api_key != INTERNAL_API_SECRET:
@@ -84,11 +88,11 @@ def verify_api_secret(x_api_key: str = Header(...)):
 # ============================================================================
 # Modèles Pydantic
 # ============================================================================
-
 class GuildConfigRequest(BaseModel):
     support_channel_id: int = None
     ticket_category_id: int = None
     staff_role_id: int = None
+    log_channel_id: int = None
     default_language: str = 'en'
 
 
@@ -107,153 +111,32 @@ class SendDMRequest(BaseModel):
 
 
 # ============================================================================
-# Routes
+# Routes globales (non-prefixées par /internal/)
 # ============================================================================
 
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Vérifie la santé de l'API."""
-    return {
-        "status": "ok",
-        "timestamp": datetime.now().isoformat()
-    }
-
-
-@app.get("/internal/guild/{guild_id}/config", tags=["Guild"])
-async def get_guild_config(guild_id: int, api_key: str = Depends(verify_api_secret)):
-    """Récupère la configuration d'un serveur."""
     try:
-        from bot.db.models import GuildModel
-        guild = GuildModel.get(guild_id)
-        
-        if not guild:
-            raise HTTPException(status_code=404, detail="Serveur non trouvé")
-        
-        return guild
+        from bot.db.connection import get_connection
+        try:
+            conn = get_connection()
+            conn.close()
+            db_status = "healthy"
+        except Exception:
+            db_status = "unhealthy"
+
+        return {
+            "status": "online",
+            "version": VERSION,
+            "environment": ENVIRONMENT,
+            "database": db_status,
+            "timestamp": datetime.utcnow().isoformat(),
+            "api_domain": API_DOMAIN
+        }
     except Exception as e:
-        logger.error(f"✗ Erreur get_guild_config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.put("/internal/guild/{guild_id}/config", tags=["Guild"])
-async def update_guild_config(guild_id: int, config: GuildConfigRequest, api_key: str = Depends(verify_api_secret)):
-    """Met à jour la configuration d'un serveur."""
-    try:
-        from bot.db.models import GuildModel
-        
-        update_data = config.dict(exclude_unset=True)
-        success = GuildModel.update(guild_id, **update_data)
-        
-        if not success:
-            raise HTTPException(status_code=400, detail="Mise à jour échouée")
-        
-        return {"status": "success", "guild_id": guild_id}
-    except Exception as e:
-        logger.error(f"✗ Erreur update_guild_config: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/internal/guild/{guild_id}/tickets", tags=["Tickets"])
-async def get_guild_tickets(guild_id: int, status: str = None, api_key: str = Depends(verify_api_secret)):
-    """Récupère les tickets d'un serveur."""
-    try:
-        from bot.db.connection import get_db_context
-        from bot.config import DB_TABLE_PREFIX
-        
-        with get_db_context() as conn:
-            cursor = conn.cursor(dictionary=True)
-            
-            if status:
-                query = f"SELECT * FROM {DB_TABLE_PREFIX}tickets WHERE guild_id = %s AND status = %s ORDER BY opened_at DESC"
-                cursor.execute(query, (guild_id, status))
-            else:
-                query = f"SELECT * FROM {DB_TABLE_PREFIX}tickets WHERE guild_id = %s ORDER BY opened_at DESC"
-                cursor.execute(query, (guild_id,))
-            
-            tickets = cursor.fetchall()
-            return {"tickets": tickets}
-    except Exception as e:
-        logger.error(f"✗ Erreur get_guild_tickets: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/internal/guild/{guild_id}/stats", tags=["Stats"])
-async def get_guild_stats(guild_id: int, api_key: str = Depends(verify_api_secret)):
-    """Récupère les statistiques d'un serveur."""
-    try:
-        from bot.db.connection import get_db_context
-        from bot.config import DB_TABLE_PREFIX
-        
-        with get_db_context() as conn:
-            cursor = conn.cursor(dictionary=True)
-            
-            # Nombre de tickets ce mois
-            cursor.execute(
-                f"SELECT COUNT(*) as count FROM {DB_TABLE_PREFIX}tickets WHERE guild_id = %s AND MONTH(opened_at) = MONTH(NOW())",
-                (guild_id,)
-            )
-            tickets_month = cursor.fetchone()['count']
-            
-            # Langues utilisées
-            cursor.execute(
-                f"SELECT user_language, COUNT(*) as count FROM {DB_TABLE_PREFIX}tickets WHERE guild_id = %s GROUP BY user_language",
-                (guild_id,)
-            )
-            languages = cursor.fetchall()
-            
-            return {
-                "guild_id": guild_id,
-                "tickets_this_month": tickets_month,
-                "languages": languages
-            }
-    except Exception as e:
-        logger.error(f"✗ Erreur get_guild_stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/internal/validate-order", tags=["Orders"])
-async def validate_order(request: ValidateOrderRequest, api_key: str = Depends(verify_api_secret)):
-    """Valide manuellement une commande."""
-    try:
-        from bot.db.models import OrderModel, SubscriptionModel
-        
-        # Récupérer la commande
-        order = OrderModel.get(request.order_id)
-        if not order:
-            raise HTTPException(status_code=404, detail="Commande non trouvée")
-        
-        # Mettre à jour le statut
-        OrderModel.update_status(request.order_id, 'paid')
-        
-        # Créer l'abonnement
-        SubscriptionModel.create(
-            guild_id=order['guild_id'],
-            user_id=order['user_id'],
-            plan=request.plan,
-            payment_id=order['id'],
-            duration_days=30
-        )
-        
-        return {"status": "success", "order_id": request.order_id}
-    except Exception as e:
-        logger.error(f"✗ Erreur validate_order: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/internal/revoke-sub", tags=["Subscriptions"])
-async def revoke_subscription(request: RevokeSubscriptionRequest, api_key: str = Depends(verify_api_secret)):
-    """Révoque un abonnement."""
-    try:
-        from bot.db.models import SubscriptionModel
-        
-        success = SubscriptionModel.deactivate(request.guild_id)
-        if not success:
-            raise HTTPException(status_code=400, detail="Révocation échouée")
-        
-        return {"status": "success", "guild_id": request.guild_id}
-    except Exception as e:
-        logger.error(f"✗ Erreur revoke_subscription: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"✗ Health check error: {e}")
+        return {"status": "degraded", "version": VERSION, "error": str(e)}
 
 
 @app.post("/webhook/oxapay", tags=["Webhooks"])
@@ -262,25 +145,20 @@ async def oxapay_webhook(payload: dict, x_webhook_signature: str = Header(None))
     try:
         from bot.services.oxapay import OxaPayClient
         from bot.db.models import OrderModel, SubscriptionModel
-        
+
         oxapay = OxaPayClient()
-        
-        # Vérifier la signature
+
         if not oxapay.verify_webhook_signature(payload, x_webhook_signature):
             logger.warning("✗ Signature webhook OxaPay invalide")
             raise HTTPException(status_code=403, detail="Signature invalide")
-        
-        # Traiter le webhook
+
         order_id = payload.get('orderId')
         status = payload.get('status')
-        
+
         if status == 'Paid':
-            # Mettre à jour la commande
             order = OrderModel.get(order_id)
             if order:
                 OrderModel.update_status(order_id, 'paid')
-                
-                # Créer l'abonnement
                 SubscriptionModel.create(
                     guild_id=order['guild_id'],
                     user_id=order['user_id'],
@@ -288,9 +166,8 @@ async def oxapay_webhook(payload: dict, x_webhook_signature: str = Header(None))
                     payment_id=order['id'],
                     duration_days=30
                 )
-                
                 logger.info(f"✓ OxaPay webhook: {order_id} payé et activé")
-        
+
         return {"status": "success"}
     except Exception as e:
         logger.error(f"✗ Erreur webhook OxaPay: {e}")
@@ -306,59 +183,24 @@ async def http_exception_handler(request, exc):
     )
 
 
+# ============================================================================
+# Démarrage
+# ============================================================================
 if __name__ == '__main__':
     import uvicorn
-    
-    # Endpoint health
-    @app.get('/health')
-    async def health_check():
-        """Vérification de santé de l'API avec infos système."""
-        try:
-            from bot.db.connection import get_connection
-            
-            # Test DB
-            try:
-                conn = get_connection()
-                conn.close()
-                db_status = "healthy"
-            except:
-                db_status = "unhealthy"
-            
-            return {
-                "status": "online",
-                "version": VERSION,
-                "environment": ENVIRONMENT,
-                "database": db_status,
-                "timestamp": datetime.utcnow().isoformat(),
-                "api_domain": API_DOMAIN
-            }
-        except Exception as e:
-            logger.error(f"✗ Health check error: {e}")
-            return {
-                "status": "degraded",
-                "version": VERSION,
-                "error": str(e)
-            }
-    
-    # Démarrer le serveur
-    host = os.getenv('API_HOST', '127.0.0.1')
+
+    host = os.getenv('API_HOST', '0.0.0.0')
     port = int(os.getenv('API_PORT', 201))
-    
-    # Configuration SSL/TLS avec Let's Encrypt
+
     ssl_certfile = "/etc/letsencrypt/live/api.veridiancloud.xyz/fullchain.pem"
     ssl_keyfile = "/etc/letsencrypt/live/api.veridiancloud.xyz/privkey.pem"
-    
-    # Vérifier que les certificats existent
+
     ssl_config = {}
     if os.path.exists(ssl_certfile) and os.path.exists(ssl_keyfile):
-        ssl_config = {
-            "ssl_certfile": ssl_certfile,
-            "ssl_keyfile": ssl_keyfile
-        }
-        logger.info(f"🔒 SSL/TLS configuré — Certificat Let's Encrypt chargé")
+        ssl_config = {"ssl_certfile": ssl_certfile, "ssl_keyfile": ssl_keyfile}
+        logger.info("🔒 SSL/TLS configuré")
     else:
-        logger.warning(f"⚠️ Certificats SSL non trouvés à {ssl_certfile} et {ssl_keyfile}")
-        logger.warning(f"⚠️ Démarrage sans SSL (HTTP non-sécurisé)")
-    
+        logger.warning("⚠️ Certificats SSL non trouvés — démarrage sans SSL")
+
     logger.info(f"🚀 API Veridian {VERSION} démarrage sur {host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level='info', **ssl_config)
