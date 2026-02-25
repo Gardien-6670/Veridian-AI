@@ -198,14 +198,23 @@ async def discord_callback(
         "is_super_admin": is_super_admin,
     }
 
-    # Stocker en DB (pas en memoire) — survit aux redemarrages
+    # Stocker en DB — survit aux redemarrages, atomique (FOR UPDATE)
     temp_code = secrets.token_urlsafe(24)
     ok = TempCodeModel.create(temp_code, jwt_token, user_data, filtered_guilds)
     if not ok:
-        raise HTTPException(status_code=500, detail="Erreur generation temp_code")
+        # La table vai_temp_codes n'existe peut-etre pas encore
+        # -> executer le schema.sql pour la creer
+        logger.error("TempCodeModel.create a echoue — la table vai_temp_codes existe-t-elle ?")
+        raise HTTPException(
+            status_code=500,
+            detail="Erreur interne: table vai_temp_codes manquante. Executez le schema.sql."
+        )
 
-    # Nettoyage opportuniste des vieux codes
-    TempCodeModel.cleanup()
+    # Nettoyage opportuniste (non bloquant)
+    try:
+        TempCodeModel.cleanup()
+    except Exception:
+        pass
 
     logger.info(f"OAuth OK: {username} ({user_id}) super_admin={is_super_admin}")
 

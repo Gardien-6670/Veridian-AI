@@ -8,7 +8,9 @@
 // CONFIG
 // ─────────────────────────────────────────────────────────────
 const API_BASE = "https://api.veridiancloud.xyz:201";
-const DISCORD_CLIENT_ID = "1475845849333498038";
+const DISCORD_CLIENT_ID = "VOTRE_CLIENT_ID"; // Remplacer par votre Client ID Discord
+// redirect_uri DOIT correspondre exactement à DISCORD_REDIRECT_URI dans le .env
+// et à ce qui est enregistré dans le portail Discord Developer
 const DISCORD_REDIRECT_URI = "https://api.veridiancloud.xyz:201/auth/callback";
 const DISCORD_OAUTH_URL = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&response_type=code&scope=identify%20email%20guilds`;
 
@@ -40,11 +42,9 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 async function initApp() {
-  // 1. Récupérer le token depuis URL param (après redirect OAuth) ou localStorage
   const urlParams = new URLSearchParams(window.location.search);
-  const urlToken = urlParams.get("token");
-  const urlCode = urlParams.get("code");
-  const urlError = urlParams.get("error");
+  const authCode  = urlParams.get("auth");   // temp_code apres OAuth (60s, usage unique)
+  const urlError  = urlParams.get("error");
 
   if (urlError) {
     showLoginScreen();
@@ -52,24 +52,14 @@ async function initApp() {
     return;
   }
 
-  if (urlToken) {
-    // Venu du callback backend (flow GET /auth/callback → redirect dashboard.html?token=...)
-    state.token = urlToken;
-    localStorage.setItem("vai_token", urlToken);
-    // Nettoyer l'URL
-    window.history.replaceState({}, "", window.location.pathname);
-    await loadUserFromToken();
+  // 1. Temp code dans l'URL → l'echanger contre le vrai JWT
+  if (authCode) {
+    // NE PAS effacer l'URL avant l'echange — si echec on peut reessayer
+    await exchangeTempCode(authCode);
     return;
   }
 
-  if (urlCode) {
-    // Flow AJAX : le frontend échange lui-même le code
-    // (utilisé si le backend ne fait pas le redirect automatiquement)
-    await handleOAuthCode(urlCode);
-    return;
-  }
-
-  // 2. Token en localStorage
+  // 2. JWT deja en localStorage (session existante)
   const stored = localStorage.getItem("vai_token");
   if (stored) {
     state.token = stored;
@@ -77,8 +67,45 @@ async function initApp() {
     return;
   }
 
-  // 3. Pas de token → écran de login
+  // 3. Rien → ecran de login
   showLoginScreen();
+}
+
+async function exchangeTempCode(tempCode) {
+  console.log("[auth] Echange temp_code...");
+  try {
+    const res = await fetch(API_BASE + "/auth/exchange", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ code: tempCode }),
+    });
+
+    console.log("[auth] /auth/exchange status:", res.status);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const msg = err.detail || "Echange de code echoue (" + res.status + ")";
+      console.error("[auth] Erreur exchange:", msg);
+      throw new Error(msg);
+    }
+
+    const data = await res.json();
+    console.log("[auth] Exchange OK, user:", data.user && data.user.username);
+
+    state.token  = data.token;
+    state.user   = data.user;
+    state.guilds = data.guilds || [];
+    localStorage.setItem("vai_token", data.token);
+
+    // Nettoyer l'URL seulement apres succes
+    window.history.replaceState({}, "", window.location.pathname);
+    renderDashboard();
+
+  } catch (e) {
+    console.error("[auth] exchangeTempCode erreur:", e);
+    showLoginScreen();
+    showToast("Erreur de connexion: " + e.message, "error");
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
