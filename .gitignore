@@ -92,3 +92,4 @@ build/
 .env.example  # Keep in repo but track
 config.local.py
 secrets.json
+.env

@@ -22,6 +22,9 @@ ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
 # Import version
 from bot.config import VERSION
 
+# Import auth router
+from api.routes.auth import router as auth_router
+
 app = FastAPI(
     title=f"Veridian AI {VERSION} - API Interne",
     description="API pour la communication bot ↔ dashboard",
@@ -45,6 +48,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include auth router
+app.include_router(auth_router)
 
 # Configuration Logging
 logger.remove()  # Supprimer handler par défaut
