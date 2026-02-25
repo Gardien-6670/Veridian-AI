@@ -320,3 +320,37 @@ SELECT
 -- ALTER TABLE vai_dashboard_sessions MODIFY COLUMN jwt_token TEXT;
 -- ALTER TABLE vai_dashboard_sessions MODIFY COLUMN access_token VARCHAR(500);
 -- ============================================================================
+
+-- ============================================================================
+-- VAI_TEMP_CODES - Codes d'echange temporaires post-OAuth (v0.3)
+-- Remplace le stockage en memoire (_temp_codes dict) pour supporter
+-- les environnements multi-process et survivre aux redemarrages.
+-- Chaque code est usage unique, expire en 60 secondes.
+-- Flux : /auth/callback genere un code -> dashboard JS l'echange via POST /auth/exchange
+-- Le JWT ne passe JAMAIS dans une URL.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS vai_temp_codes (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    code        VARCHAR(64)     NOT NULL UNIQUE  COMMENT 'Token URL-safe genere par secrets.token_urlsafe(24)',
+    jwt_token   TEXT            NOT NULL         COMMENT 'JWT complet a retourner apres echange',
+    user_json   JSON            NOT NULL         COMMENT 'Donnees utilisateur {id, username, avatar, is_super_admin}',
+    guilds_json JSON            NOT NULL         COMMENT 'Liste des guilds filtrees de l utilisateur',
+    used        TINYINT(1)      DEFAULT 0        COMMENT '1 = deja consomme (usage unique)',
+    expires_at  TIMESTAMP       NOT NULL         COMMENT 'Expire 60 secondes apres creation',
+    created_at  TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_code    (code),
+    KEY idx_expires (expires_at),
+    KEY idx_used    (used)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Nettoyage automatique des codes expires (evenement MySQL)
+-- A activer si event_scheduler = ON dans MySQL config
+-- CREATE EVENT IF NOT EXISTS vai_cleanup_temp_codes
+--     ON SCHEDULE EVERY 5 MINUTE
+--     DO DELETE FROM vai_temp_codes WHERE expires_at < NOW() OR used = 1;
+
+-- ============================================================================
+-- Migration depuis v0.2 (si la DB existe deja)
+-- CREATE TABLE IF NOT EXISTS vai_temp_codes (...) -- voir ci-dessus
+-- ============================================================================

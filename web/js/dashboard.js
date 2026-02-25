@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────────────────────
 const API_BASE = "https://api.veridiancloud.xyz:201";
 const DISCORD_CLIENT_ID = "1475845849333498038";
-const DISCORD_REDIRECT_URI = "https://veridiancloud.xyz/auth/callback";
+const DISCORD_REDIRECT_URI = "https://api.veridiancloud.xyz:201/auth/callback";
 const DISCORD_OAUTH_URL = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&response_type=code&scope=identify%20email%20guilds`;
 
 // ─────────────────────────────────────────────────────────────

@@ -1,22 +1,24 @@
 """
-OAuth2 Discord Authentication pour Dashboard
-IMPORTANT - Redirect URI :
-  Le callback DOIT pointer vers l'API (api.veridiancloud.xyz), pas vers le front.
-  Variable DISCORD_REDIRECT_URI dans .env doit valoir :
-      https://api.veridiancloud.xyz/auth/callback
-  Et cette URI doit etre enregistree dans le portail Discord Developer.
+OAuth2 Discord Authentication — Architecture securisee v0.3
+Flux :
+  1. Discord -> /auth/callback?code=DISCORD_CODE
+  2. API echange le code, genere JWT + temp_code (DB, 60s, usage unique)
+  3. Redirect vers dashboard.html?auth=TEMP_CODE
+  4. JS POST /auth/exchange {code} -> recoit {token, user, guilds}
+  5. JWT stocke en localStorage uniquement — jamais dans une URL
 """
 
-from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 import aiohttp
 import os
+import secrets
 from datetime import datetime, timedelta
 import jwt
 from loguru import logger
 
 from bot.db.connection import get_db_context
-from bot.db.models import DashboardSessionModel
+from bot.db.models import DashboardSessionModel, TempCodeModel
 from bot.config import DB_TABLE_PREFIX
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -30,26 +32,15 @@ DISCORD_OAUTH_URL = "https://discord.com/api/v10/oauth2/authorize"
 # ─────────────────────────────────────────────────────────────
 
 def _get_redirect_uri() -> str:
-    """
-    URI de redirection OAuth2.
-    DOIT pointer vers l'API FastAPI (api.veridiancloud.xyz), pas vers le front.
-    Configurez DISCORD_REDIRECT_URI=https://api.veridiancloud.xyz/auth/callback dans .env
-    et enregistrez cette meme URI dans Discord Developer Portal > OAuth2 > Redirects.
-    """
     explicit = os.getenv("DISCORD_REDIRECT_URI")
     if explicit:
         return explicit
-    # Fallback : construit depuis API_DOMAIN
     api_domain = os.getenv("API_DOMAIN", "api.veridiancloud.xyz")
     return f"https://{api_domain}/auth/callback"
 
 
 def _get_dashboard_url() -> str:
-    # Cherche d'abord DASHBOARD_URL, sinon construit depuis le domaine
-    url = os.getenv("DASHBOARD_URL")
-    if url:
-        return url
-    return "https://veridiancloud.xyz/dashboard.html"
+    return os.getenv("DASHBOARD_URL", "https://veridiancloud.xyz/dashboard.html")
 
 
 def get_active_guild_ids() -> list:
@@ -59,16 +50,14 @@ def get_active_guild_ids() -> list:
             cursor.execute(f"SELECT id FROM {DB_TABLE_PREFIX}guilds")
             return [int(row[0]) for row in cursor.fetchall()]
     except Exception as e:
-        logger.error(f"Erreur recuperation guilds actives: {e}")
+        logger.error(f"Erreur recuperation guilds: {e}")
         return []
 
 
 async def _exchange_code_and_fetch_user(code: str, redirect_uri: str) -> dict:
     client_id     = os.getenv("DISCORD_CLIENT_ID")
     client_secret = os.getenv("DISCORD_CLIENT_SECRET")
-
     async with aiohttp.ClientSession() as session:
-        # 1. Echange du code contre un access_token
         token_resp = await session.post(
             f"{DISCORD_API_BASE}/oauth2/token",
             data={
@@ -83,30 +72,22 @@ async def _exchange_code_and_fetch_user(code: str, redirect_uri: str) -> dict:
             err = await token_resp.text()
             logger.error(f"Token exchange failed ({token_resp.status}): {err}")
             raise HTTPException(status_code=400, detail=f"Token exchange failed: {err}")
-
         token_data   = await token_resp.json()
         access_token = token_data.get("access_token")
         if not access_token:
-            raise HTTPException(status_code=400, detail="No access_token in Discord response")
-
-        headers = {"Authorization": f"Bearer {access_token}"}
-
-        # 2. Profil utilisateur
-        user_resp = await session.get(f"{DISCORD_API_BASE}/users/@me", headers=headers)
+            raise HTTPException(status_code=400, detail="Pas d'access_token Discord")
+        headers     = {"Authorization": f"Bearer {access_token}"}
+        user_resp   = await session.get(f"{DISCORD_API_BASE}/users/@me", headers=headers)
         if user_resp.status != 200:
-            raise HTTPException(status_code=400, detail="Failed to get Discord user profile")
-        user = await user_resp.json()
-
-        # 3. Serveurs de l'utilisateur
+            raise HTTPException(status_code=400, detail="Impossible de recuperer le profil")
+        user        = await user_resp.json()
         guilds_resp = await session.get(f"{DISCORD_API_BASE}/users/@me/guilds", headers=headers)
-        guilds = await guilds_resp.json() if guilds_resp.status == 200 else []
-
+        guilds      = await guilds_resp.json() if guilds_resp.status == 200 else []
     return {"access_token": access_token, "user": user, "guilds": guilds}
 
 
 def _build_filtered_guilds(all_guilds: list) -> list:
-    """Garde uniquement les serveurs ou l'utilisateur est admin ET ou le bot est installe."""
-    ADMIN_PERM   = 0x8
+    ADMIN_PERM    = 0x8
     bot_guild_ids = get_active_guild_ids()
     result = []
     for g in all_guilds:
@@ -167,10 +148,6 @@ def _save_session(discord_user_id: int, discord_username: str,
 
 @router.get("/discord/login")
 def discord_login():
-    """
-    Redirige vers Discord OAuth2.
-    Le redirect_uri pointe vers l'API (api.veridiancloud.xyz/auth/callback).
-    """
     client_id    = os.getenv("DISCORD_CLIENT_ID")
     redirect_uri = _get_redirect_uri()
     auth_url = (
@@ -180,7 +157,7 @@ def discord_login():
         f"&response_type=code"
         f"&scope=identify%20guilds"
     )
-    logger.info(f"Login Discord -> redirect_uri={redirect_uri}")
+    logger.info(f"Login Discord -> {redirect_uri}")
     return RedirectResponse(url=auth_url)
 
 
@@ -190,110 +167,90 @@ async def discord_callback(
     error: str = Query(None),
 ):
     """
-    Callback OAuth2 — Discord redirige ICI apres connexion.
-    Cette route doit etre sur api.veridiancloud.xyz, pas sur le front.
-    Apres auth, redirige vers le dashboard front avec le JWT en param URL.
+    Callback OAuth2 Discord.
+    Genere un temp_code en DB (60s, usage unique) et redirige
+    vers le dashboard avec ?auth=TEMP_CODE.
+    Le JWT ne passe JAMAIS dans l'URL.
     """
     dashboard_url = _get_dashboard_url()
 
     if error:
-        logger.warning(f"OAuth error: {error}")
         return RedirectResponse(url=f"{dashboard_url}?error={error}", status_code=302)
-
     if not code:
-        raise HTTPException(status_code=400, detail="No authorization code provided")
+        raise HTTPException(status_code=400, detail="Code manquant")
 
-    redirect_uri = _get_redirect_uri()
-    logger.info(f"OAuth callback recu, echange code, redirect_uri={redirect_uri}")
-
-    data     = await _exchange_code_and_fetch_user(code, redirect_uri)
+    data     = await _exchange_code_and_fetch_user(code, _get_redirect_uri())
     user     = data["user"]
     user_id  = int(user.get("id", 0))
     username = user.get("username", "Unknown")
 
-    bot_owner_id   = int(os.getenv("BOT_OWNER_DISCORD_ID", 0))
-    is_super_admin = user_id == bot_owner_id
+    bot_owner_id    = int(os.getenv("BOT_OWNER_DISCORD_ID", 0))
+    is_super_admin  = user_id == bot_owner_id
+    filtered_guilds = _build_filtered_guilds(data["guilds"])
+    jwt_token       = _create_jwt(user_id, username, is_super_admin)
 
-    jwt_token = _create_jwt(user_id, username, is_super_admin)
     _save_session(user_id, username, data["access_token"], jwt_token)
 
-    logger.info(f"OAuth OK: {username} ({user_id}) super_admin={is_super_admin} -> redirect: {dashboard_url}?token=...")
+    user_data = {
+        "id":             str(user_id),
+        "username":       username,
+        "avatar":         _build_avatar_url(user, user_id),
+        "is_super_admin": is_super_admin,
+    }
 
-    # Redirection vers le FRONT avec le token en parametre URL
-    # Le JS du dashboard recoit le token depuis window.location.search
-    resp = RedirectResponse(
-        url=f"{dashboard_url}?token={jwt_token}",
+    # Stocker en DB (pas en memoire) — survit aux redemarrages
+    temp_code = secrets.token_urlsafe(24)
+    ok = TempCodeModel.create(temp_code, jwt_token, user_data, filtered_guilds)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Erreur generation temp_code")
+
+    # Nettoyage opportuniste des vieux codes
+    TempCodeModel.cleanup()
+
+    logger.info(f"OAuth OK: {username} ({user_id}) super_admin={is_super_admin}")
+
+    return RedirectResponse(
+        url=f"{dashboard_url}?auth={temp_code}",
         status_code=302,
     )
-    # Cookie httpOnly en plus (pour les requetes API directes)
-    resp.set_cookie(
-        key="vai_token",
-        value=jwt_token,
-        max_age=7 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-        secure=True,
-        domain=".veridiancloud.xyz",  # partage entre api. et www.
-    )
-    return resp
 
 
-@router.post("/discord")
-async def discord_auth_ajax(request: Request):
+@router.post("/exchange")
+async def exchange_temp_code(request: Request):
     """
-    Echange un code OAuth2 en AJAX (flow popup).
+    Echange un temp_code contre {token, user, guilds}.
+    Usage unique, expire en 60 secondes, atomique en DB (FOR UPDATE).
     Body JSON: { "code": "..." }
     """
-    body = await request.json()
-    code = body.get("code")
-    if not code:
-        raise HTTPException(status_code=400, detail="No code provided")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Body JSON invalide")
 
-    redirect_uri = _get_redirect_uri()
-    data         = await _exchange_code_and_fetch_user(code, redirect_uri)
+    temp_code = body.get("code")
+    if not temp_code:
+        raise HTTPException(status_code=400, detail="Champ 'code' manquant")
 
-    user       = data["user"]
-    all_guilds = data["guilds"]
-    user_id    = int(user.get("id", 0))
-    username   = user.get("username", "Unknown")
+    data = TempCodeModel.consume(temp_code)
+    if not data:
+        raise HTTPException(status_code=400, detail="Code invalide, expire ou deja utilise")
 
-    filtered_guilds = _build_filtered_guilds(all_guilds)
-    avatar_url      = _build_avatar_url(user, user_id)
-
-    bot_owner_id   = int(os.getenv("BOT_OWNER_DISCORD_ID", 0))
-    is_super_admin = user_id == bot_owner_id
-
-    jwt_token = _create_jwt(user_id, username, is_super_admin)
-    _save_session(user_id, username, data["access_token"], jwt_token)
-
-    logger.info(f"OAuth AJAX: {username} ({user_id}) {len(filtered_guilds)} guilds")
+    logger.info(f"Temp code echange: {data['user'].get('username')}")
 
     return JSONResponse(content={
-        "token": jwt_token,
-        "user": {
-            "id":             str(user_id),
-            "username":       username,
-            "avatar":         avatar_url,
-            "is_super_admin": is_super_admin,
-        },
-        "guilds": filtered_guilds,
+        "token":  data["jwt"],
+        "user":   data["user"],
+        "guilds": data["guilds"],
     })
 
 
 @router.get("/user/me")
 async def get_current_user(request: Request):
-    """Infos de l'utilisateur connecte depuis le JWT (cookie ou Bearer)."""
-    token = None
+    """Valide le JWT Bearer et retourne les infos utilisateur."""
     auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-    if not token:
-        token = request.cookies.get("vai_token")
-    if not token:
-        token = request.query_params.get("token")
-    if not token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Header Authorization manquant")
+    token = auth_header[7:]
     try:
         secret  = os.getenv("JWT_SECRET", "change_me_in_production")
         payload = jwt.decode(token, secret, algorithms=["HS256"])
@@ -303,27 +260,27 @@ async def get_current_user(request: Request):
             "is_super_admin": payload.get("is_super_admin", False),
         }
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
+        raise HTTPException(status_code=401, detail="Token expire")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Token invalide")
 
 
 @router.post("/logout")
-async def logout(request: Request, response: Response):
-    """Deconnexion — invalide le cookie et la session DB."""
-    token = request.cookies.get("vai_token")
+async def logout(request: Request):
+    """Invalide la session en DB."""
+    token = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
     if not token:
         try:
             body  = await request.json()
             token = body.get("token")
         except Exception:
             pass
-
     if token:
         try:
             DashboardSessionModel.revoke_token(token)
         except Exception as e:
             logger.warning(f"Logout DB error: {e}")
-
-    response.delete_cookie("vai_token", domain=".veridiancloud.xyz")
     return JSONResponse(content={"status": "success"})

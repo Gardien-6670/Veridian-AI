@@ -833,3 +833,79 @@ class BotStatusModel:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(f"SELECT * FROM {DB_TABLE_PREFIX}bot_status WHERE id = 1")
             return cursor.fetchone()
+
+
+# ============================================================================
+# VAI_TEMP_CODES - Codes d'echange temporaires post-OAuth
+# ============================================================================
+
+class TempCodeModel:
+
+    @staticmethod
+    def create(code: str, jwt_token: str, user: dict, guilds: list) -> bool:
+        import json
+        with get_db_context() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    f"INSERT INTO {DB_TABLE_PREFIX}temp_codes "
+                    f"(code, jwt_token, user_json, guilds_json, expires_at) "
+                    f"VALUES (%s, %s, %s, %s, DATE_ADD(NOW(), INTERVAL 60 SECOND))",
+                    (code, jwt_token, json.dumps(user), json.dumps(guilds))
+                )
+                return True
+            except Exception as e:
+                logger.error(f"Erreur creation temp_code: {e}")
+                return False
+
+    @staticmethod
+    def consume(code: str) -> Optional[Dict]:
+        """
+        Consomme le code (usage unique).
+        Retourne {jwt_token, user, guilds} ou None si invalide/expire/deja utilise.
+        """
+        import json
+        with get_db_context() as conn:
+            cursor = conn.cursor(dictionary=True)
+            try:
+                # Lire ET marquer comme utilise en une transaction atomique
+                cursor.execute(
+                    f"SELECT * FROM {DB_TABLE_PREFIX}temp_codes "
+                    f"WHERE code = %s AND used = 0 AND expires_at > NOW()"
+                    f" FOR UPDATE",
+                    (code,)
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                # Marquer comme utilise immediatement
+                cursor.execute(
+                    f"UPDATE {DB_TABLE_PREFIX}temp_codes SET used = 1 WHERE code = %s",
+                    (code,)
+                )
+                return {
+                    "jwt":    row["jwt_token"],
+                    "user":   json.loads(row["user_json"]),
+                    "guilds": json.loads(row["guilds_json"]),
+                }
+            except Exception as e:
+                logger.error(f"Erreur consommation temp_code: {e}")
+                return None
+
+    @staticmethod
+    def cleanup() -> int:
+        """Supprime les codes expires ou deja utilises. A appeler periodiquement."""
+        with get_db_context() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    f"DELETE FROM {DB_TABLE_PREFIX}temp_codes "
+                    f"WHERE expires_at < NOW() OR used = 1"
+                )
+                count = cursor.rowcount
+                if count:
+                    logger.debug(f"{count} temp_codes nettoyes")
+                return count
+            except Exception as e:
+                logger.error(f"Erreur cleanup temp_codes: {e}")
+                return 0

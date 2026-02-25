@@ -4,6 +4,7 @@ Constantes globales du projet Veridian AI v0.2
 
 # Version
 VERSION = "0.2.0"
+VERSION_EMOJI = "🤖"
 
 # Discord Configuration
 BOT_OWNER_DISCORD_ID = 1047760053509312642
