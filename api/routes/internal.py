@@ -15,6 +15,7 @@ from bot.db.models import (
 from bot.config import PLAN_LIMITS
 from loguru import logger
 import os
+import jwt as pyjwt
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -23,11 +24,51 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 # Auth middleware
 # ============================================================================
 
-def verify_api_secret(x_api_secret: str = Header(None)):
+def _decode_jwt(token: str) -> dict:
+    """Decode and validate a JWT token. Returns payload or raises HTTPException."""
+    try:
+        secret = os.getenv("JWT_SECRET", "change_me_in_production")
+        return pyjwt.decode(token, secret, algorithms=["HS256"])
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expire")
+    except pyjwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Token invalide")
+
+
+def verify_internal_auth(request: Request, x_api_secret: str = Header(None)) -> dict:
+    """
+    Authentification double pour les routes internes :
+      - X-API-SECRET : communication bot → API (secret serveur)
+      - Authorization: Bearer JWT : communication dashboard → API
+    Retourne un dict avec is_super_admin et user_id.
+    """
+    # 1. Secret interne (bot ou service serveur)
     expected = os.getenv("INTERNAL_API_SECRET")
-    if not x_api_secret or x_api_secret != expected:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return True
+    if x_api_secret and expected and x_api_secret == expected:
+        return {"is_bot": True, "is_super_admin": True, "user_id": 0}
+
+    # 2. JWT Bearer (dashboard utilisateur)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        payload = _decode_jwt(auth_header[7:])
+        return {
+            "is_bot": False,
+            "is_super_admin": bool(payload.get("is_super_admin", False)),
+            "user_id": payload.get("sub", 0),
+        }
+
+    raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def verify_super_admin(request: Request, x_api_secret: str = Header(None)) -> dict:
+    """
+    Restreint l'accès aux routes Super Admin uniquement.
+    Accepte le secret bot OU un JWT avec is_super_admin=True.
+    """
+    auth = verify_internal_auth(request, x_api_secret)
+    if not auth.get("is_super_admin"):
+        raise HTTPException(status_code=403, detail="Acces reserve au Super Admin")
+    return auth
 
 
 # ============================================================================
@@ -76,7 +117,7 @@ class KBEntryBody(BaseModel):
 # Health
 # ============================================================================
 
-@router.get("/health", dependencies=[Depends(verify_api_secret)])
+@router.get("/health", dependencies=[Depends(verify_internal_auth)])
 def health_check():
     try:
         with get_db_context():
@@ -89,7 +130,7 @@ def health_check():
 # Guild config - lu et ecrit exclusivement par le dashboard
 # ============================================================================
 
-@router.get("/guild/{guild_id}/config", dependencies=[Depends(verify_api_secret)])
+@router.get("/guild/{guild_id}/config", dependencies=[Depends(verify_internal_auth)])
 def get_guild_config(guild_id: int):
     guild = GuildModel.get(guild_id)
     if not guild:
@@ -97,7 +138,7 @@ def get_guild_config(guild_id: int):
     return guild
 
 
-@router.put("/guild/{guild_id}/config", dependencies=[Depends(verify_api_secret)])
+@router.put("/guild/{guild_id}/config", dependencies=[Depends(verify_internal_auth)])
 def update_guild_config(guild_id: int, body: GuildConfigBody, request: Request):
     guild = GuildModel.get(guild_id)
     if not guild:
@@ -131,7 +172,7 @@ def update_guild_config(guild_id: int, body: GuildConfigBody, request: Request):
 # Tickets
 # ============================================================================
 
-@router.get("/guild/{guild_id}/tickets", dependencies=[Depends(verify_api_secret)])
+@router.get("/guild/{guild_id}/tickets", dependencies=[Depends(verify_internal_auth)])
 def get_guild_tickets(guild_id: int, status: Optional[str] = None,
                       page: int = 1, limit: int = 50):
     tickets = TicketModel.get_by_guild(guild_id, status=status, page=page, limit=limit)
@@ -145,7 +186,7 @@ def get_guild_tickets(guild_id: int, status: Optional[str] = None,
     }
 
 
-@router.get("/ticket/{ticket_id}", dependencies=[Depends(verify_api_secret)])
+@router.get("/ticket/{ticket_id}", dependencies=[Depends(verify_internal_auth)])
 def get_ticket(ticket_id: int):
     ticket = TicketModel.get(ticket_id)
     if not ticket:
@@ -153,7 +194,7 @@ def get_ticket(ticket_id: int):
     return ticket
 
 
-@router.get("/ticket/{ticket_id}/transcript", dependencies=[Depends(verify_api_secret)])
+@router.get("/ticket/{ticket_id}/transcript", dependencies=[Depends(verify_internal_auth)])
 def get_ticket_transcript(ticket_id: int):
     ticket = TicketModel.get(ticket_id)
     if not ticket:
@@ -171,7 +212,7 @@ def get_ticket_transcript(ticket_id: int):
     }
 
 
-@router.post("/ticket/{ticket_id}/close", dependencies=[Depends(verify_api_secret)])
+@router.post("/ticket/{ticket_id}/close", dependencies=[Depends(verify_internal_auth)])
 def close_ticket_dashboard(ticket_id: int, request: Request):
     ticket = TicketModel.get(ticket_id)
     if not ticket:
@@ -187,7 +228,7 @@ def close_ticket_dashboard(ticket_id: int, request: Request):
 # Stats guild
 # ============================================================================
 
-@router.get("/guild/{guild_id}/stats", dependencies=[Depends(verify_api_secret)])
+@router.get("/guild/{guild_id}/stats", dependencies=[Depends(verify_internal_auth)])
 def get_guild_stats(guild_id: int):
     open_tickets    = TicketModel.count_by_guild(guild_id, status="open")
     inprog_tickets  = TicketModel.count_by_guild(guild_id, status="in_progress")
@@ -214,19 +255,19 @@ def get_guild_stats(guild_id: int):
 # Orders
 # ============================================================================
 
-@router.get("/orders/pending", dependencies=[Depends(verify_api_secret)])
+@router.get("/orders/pending", dependencies=[Depends(verify_super_admin)])
 def get_pending_orders():
     orders = OrderModel.list_pending()
     return {"total": len(orders), "orders": orders}
 
 
-@router.get("/orders", dependencies=[Depends(verify_api_secret)])
+@router.get("/orders", dependencies=[Depends(verify_super_admin)])
 def get_orders(page: int = 1, limit: int = 50, status: Optional[str] = None):
     orders = OrderModel.list_all(page=page, limit=limit, status=status)
     return {"orders": orders, "page": page, "limit": limit}
 
 
-@router.put("/orders/{order_id}/status", dependencies=[Depends(verify_api_secret)])
+@router.put("/orders/{order_id}/status", dependencies=[Depends(verify_super_admin)])
 def update_order_status(order_id: str, body: OrderStatusBody, request: Request):
     order = OrderModel.get(order_id)
     if not order:
@@ -275,7 +316,7 @@ def update_order_status(order_id: str, body: OrderStatusBody, request: Request):
 # Subscriptions admin
 # ============================================================================
 
-@router.post("/admin/activate-sub", dependencies=[Depends(verify_api_secret)])
+@router.post("/admin/activate-sub", dependencies=[Depends(verify_super_admin)])
 def activate_subscription(body: ActivateSubBody, request: Request):
     actor_id = getattr(request.state, "user_id", None)
     SubscriptionModel.create(
@@ -293,7 +334,7 @@ def activate_subscription(body: ActivateSubBody, request: Request):
     return {"status": "success", "guild_id": body.guild_id, "plan": body.plan}
 
 
-@router.post("/revoke-sub", dependencies=[Depends(verify_api_secret)])
+@router.post("/revoke-sub", dependencies=[Depends(verify_super_admin)])
 def revoke_subscription(body: RevokeSubBody, request: Request):
     actor_id = getattr(request.state, "user_id", None)
     SubscriptionModel.deactivate(body.guild_id)
@@ -309,7 +350,7 @@ def revoke_subscription(body: RevokeSubBody, request: Request):
 # Knowledge Base
 # ============================================================================
 
-@router.get("/guild/{guild_id}/kb", dependencies=[Depends(verify_api_secret)])
+@router.get("/guild/{guild_id}/kb", dependencies=[Depends(verify_internal_auth)])
 def get_kb(guild_id: int):
     entries = KnowledgeBaseModel.get_by_guild(guild_id)
     limit   = PLAN_LIMITS.get(
@@ -323,7 +364,7 @@ def get_kb(guild_id: int):
     }
 
 
-@router.post("/guild/{guild_id}/kb", dependencies=[Depends(verify_api_secret)])
+@router.post("/guild/{guild_id}/kb", dependencies=[Depends(verify_internal_auth)])
 def create_kb_entry(guild_id: int, body: KBEntryBody, request: Request):
     # Verifier la limite du plan
     sub   = SubscriptionModel.get(guild_id)
@@ -358,7 +399,7 @@ def create_kb_entry(guild_id: int, body: KBEntryBody, request: Request):
     return {"status": "success", "id": kb_id}
 
 
-@router.put("/guild/{guild_id}/kb/{kb_id}", dependencies=[Depends(verify_api_secret)])
+@router.put("/guild/{guild_id}/kb/{kb_id}", dependencies=[Depends(verify_internal_auth)])
 def update_kb_entry(guild_id: int, kb_id: int, body: KBEntryBody, request: Request):
     entry = KnowledgeBaseModel.get(kb_id)
     if not entry or entry["guild_id"] != guild_id:
@@ -372,7 +413,7 @@ def update_kb_entry(guild_id: int, kb_id: int, body: KBEntryBody, request: Reque
     return {"status": "success", "id": kb_id}
 
 
-@router.delete("/guild/{guild_id}/kb/{kb_id}", dependencies=[Depends(verify_api_secret)])
+@router.delete("/guild/{guild_id}/kb/{kb_id}", dependencies=[Depends(verify_internal_auth)])
 def delete_kb_entry(guild_id: int, kb_id: int, request: Request):
     entry = KnowledgeBaseModel.get(kb_id)
     if not entry or entry["guild_id"] != guild_id:
@@ -389,7 +430,7 @@ def delete_kb_entry(guild_id: int, kb_id: int, request: Request):
 # Super Admin - statistiques globales
 # ============================================================================
 
-@router.get("/admin/stats", dependencies=[Depends(verify_api_secret)])
+@router.get("/admin/stats", dependencies=[Depends(verify_super_admin)])
 def get_global_stats():
     try:
         from bot.db.connection import get_db_context
@@ -415,13 +456,13 @@ def get_global_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/admin/guilds", dependencies=[Depends(verify_api_secret)])
+@router.get("/admin/guilds", dependencies=[Depends(verify_super_admin)])
 def get_all_guilds():
     guilds = GuildModel.get_all()
     return {"total": len(guilds), "guilds": guilds}
 
 
-@router.get("/admin/audit", dependencies=[Depends(verify_api_secret)])
+@router.get("/admin/audit", dependencies=[Depends(verify_super_admin)])
 def get_audit_log(guild_id: Optional[int] = None, limit: int = 100):
     logs = AuditLogModel.get_recent(guild_id=guild_id, limit=limit)
     return {"logs": logs}
@@ -431,14 +472,14 @@ def get_audit_log(guild_id: Optional[int] = None, limit: int = 100):
 # Bot status (ecrit par le bot, lu par le dashboard)
 # ============================================================================
 
-@router.post("/bot/heartbeat", dependencies=[Depends(verify_api_secret)])
+@router.post("/bot/heartbeat", dependencies=[Depends(verify_internal_auth)])
 def bot_heartbeat(guild_count: int = 0, user_count: int = 0,
                   uptime_sec: int = 0, version: str = ""):
     BotStatusModel.update(guild_count, user_count, uptime_sec, version)
     return {"status": "ok"}
 
 
-@router.get("/bot/status", dependencies=[Depends(verify_api_secret)])
+@router.get("/bot/status", dependencies=[Depends(verify_internal_auth)])
 def bot_status():
     status = BotStatusModel.get()
     return status or {"status": "unknown"}

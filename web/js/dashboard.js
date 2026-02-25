@@ -1,18 +1,17 @@
 /**
  * Veridian AI — Dashboard JS
- * FIX: redirect_uri cohérent, gestion token JWT, appels API internes
- * ADDED: recherche tickets, transcripts, settings save, KB CRUD, super-admin panel
+ * Auth: JWT Bearer uniquement pour les appels /internal/*
+ * CDC 2026: utilisateur lambda = Tickets + Settings uniquement
+ *           Super Admin = tout (Dashboard, Orders, KB, Super Admin, clés Groq)
  */
 
 // ─────────────────────────────────────────────────────────────
 // CONFIG
 // ─────────────────────────────────────────────────────────────
 const API_BASE = "https://api.veridiancloud.xyz:201";
-const DISCORD_CLIENT_ID = "VOTRE_CLIENT_ID"; // Remplacer par votre Client ID Discord
 // redirect_uri DOIT correspondre exactement à DISCORD_REDIRECT_URI dans le .env
 // et à ce qui est enregistré dans le portail Discord Developer
 const DISCORD_REDIRECT_URI = "https://api.veridiancloud.xyz:201/auth/callback";
-const DISCORD_OAUTH_URL = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&response_type=code&scope=identify%20email%20guilds`;
 
 // ─────────────────────────────────────────────────────────────
 // STATE
@@ -113,8 +112,8 @@ async function exchangeTempCode(tempCode) {
 // ─────────────────────────────────────────────────────────────
 
 function loginWithDiscord() {
-  // Redirect vers Discord OAuth — le backend gère le callback
-  window.location.href = DISCORD_OAUTH_URL;
+  // Redirect vers le backend qui gère le flux OAuth Discord
+  window.location.href = API_BASE + "/auth/discord/login";
 }
 
 async function handleOAuthCode(code) {
@@ -190,11 +189,13 @@ function renderDashboard() {
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app").style.display = "flex";
 
+  const isSuper = !!state.user?.is_super_admin;
+
   // User card
   const u = state.user;
   if (u) {
     document.querySelector(".user-name").textContent = u.username || "—";
-    document.querySelector(".user-role").textContent = u.is_super_admin ? "Super Admin 👑" : "Server Admin";
+    document.querySelector(".user-role").textContent = isSuper ? "Super Admin 👑" : "Admin Serveur";
     const avatarImg = document.querySelector(".user-avatar-img");
     if (avatarImg && u.avatar) avatarImg.src = u.avatar;
   }
@@ -202,11 +203,24 @@ function renderDashboard() {
   // Server selector
   populateServerSelector();
 
-  // Super admin panel toggle
-  toggleSuperAdminNav(state.user?.is_super_admin);
+  // CDC: navigation et pages réservées au Super Admin
+  toggleSuperAdminNav(isSuper);
 
-  // Charger la page courante
-  navigateTo(state.currentPage || "dashboard");
+  // CDC: masquer les pages réservées au Super Admin pour les utilisateurs lambda
+  // Utilisateur lambda : uniquement Tickets + Settings
+  const superOnlyPages = ["page-dashboard", "page-orders", "page-kb"];
+  superOnlyPages.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isSuper ? "" : "none";
+  });
+
+  // CDC: masquer le bouton Upgrader (redirige vers Orders, réservé Super Admin)
+  const upgradeBtn = document.querySelector(".btn[onclick*=\"orders\"]");
+  if (upgradeBtn) upgradeBtn.style.display = isSuper ? "" : "none";
+
+  // Charger la page par défaut selon le rôle
+  const defaultPage = isSuper ? "dashboard" : "tickets";
+  navigateTo(state.currentPage || defaultPage);
 }
 
 function populateServerSelector() {
@@ -239,8 +253,10 @@ function populateServerSelector() {
 }
 
 function toggleSuperAdminNav(isSuperAdmin) {
-  const adminItems = document.querySelectorAll("[data-super-admin]");
-  adminItems.forEach((el) => {
+  // Tous les éléments marqués [data-super-admin] sont réservés au Super Admin :
+  // nav items Dashboard, Orders, KB + groupe Super Admin dans la sidebar
+  // CDC 2026 : utilisateur lambda = Tickets + Settings uniquement
+  document.querySelectorAll("[data-super-admin]").forEach((el) => {
     el.style.display = isSuperAdmin ? "" : "none";
   });
 }
@@ -259,6 +275,11 @@ function initNav() {
 }
 
 function navigateTo(page) {
+  // CDC: utilisateur lambda = non super-admin
+  // Pages réservées au Super Admin : dashboard (global), orders, kb, superadmin
+  const isSuper = !!state.user?.is_super_admin;
+  if (!isSuper && ["dashboard", "orders", "kb", "superadmin"].includes(page)) page = "tickets";
+
   state.currentPage = page;
 
   // Nav items
@@ -286,7 +307,7 @@ function navigateTo(page) {
   // Charger les données de la page
   if (state.token && state.currentGuild) {
     if (page === "tickets") loadTickets();
-    if (page === "orders") loadOrders();
+    if (page === "orders" && state.user?.is_super_admin) loadOrders();
     if (page === "settings") loadSettings();
     if (page === "kb") loadKB();
     if (page === "dashboard") loadDashboardStats();
@@ -300,7 +321,13 @@ function navigateTo(page) {
 
 async function apiFetch(path, { auth = false, method = "GET", body = null } = {}) {
   const headers = { "Content-Type": "application/json" };
-  if (auth && state.token) headers["Authorization"] = `Bearer ${state.token}`;
+
+  // Toutes les routes /internal/* et /auth/* nécessitent le JWT Bearer.
+  // Le secret interne (INTERNAL_API_SECRET) reste côté serveur uniquement
+  // et n'est jamais exposé dans le navigateur.
+  if ((auth || path.startsWith("/internal/")) && state.token) {
+    headers["Authorization"] = `Bearer ${state.token}`;
+  }
 
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
@@ -349,13 +376,19 @@ async function loadDashboardStats() {
     console.warn("Dashboard stats:", e.message);
   }
 
-  // Aussi charger les commandes en attente pour le badge
-  try {
-    const orders = await apiFetch(`/internal/orders/pending`, { auth: true });
+  // Les commandes (orders) sont réservées au Super Admin
+  if (state.user?.is_super_admin) {
+    try {
+      const orders = await apiFetch(`/internal/orders/pending`, { auth: true });
+      const badge = document.querySelector('[data-badge="orders"]');
+      if (badge && orders.total != null) badge.textContent = orders.total;
+      setStatValue("stat-orders-attente", orders.total ?? "—");
+    } catch (_) {}
+  } else {
     const badge = document.querySelector('[data-badge="orders"]');
-    if (badge && orders.total != null) badge.textContent = orders.total;
-    setStatValue("stat-orders-attente", orders.total ?? "—");
-  } catch (_) {}
+    if (badge) badge.textContent = "—";
+    setStatValue("stat-orders-attente", "—");
+  }
 }
 
 function setStatValue(id, value) {
@@ -524,8 +557,8 @@ async function loadOrders() {
   }
 }
 
-function renderOrders(orders) {
-  const container = document.getElementById("orders-list");
+function renderOrders(orders, containerId = "orders-list") {
+  const container = document.getElementById(containerId);
   if (!container) return;
 
   if (!orders.length) {
@@ -778,25 +811,48 @@ async function deleteKBEntry(id) {
 // ─────────────────────────────────────────────────────────────
 
 async function loadSuperAdminData() {
-  try {
-    const [globalStats, pendingOrders] = await Promise.allSettled([
-      apiFetch("/internal/admin/stats", { auth: true }),
-      apiFetch("/internal/orders/pending", { auth: true }),
-    ]);
+  // Indicateur de chargement
+  const ordersContainer = document.getElementById("admin-orders-list");
+  if (ordersContainer) ordersContainer.innerHTML = `<div style="color:var(--text3);font-size:13px;text-align:center;padding:24px">Chargement…</div>`;
 
-    if (globalStats.status === "fulfilled") {
-      const s = globalStats.value;
-      setStatValue("admin-stat-servers", s.total_guilds ?? "—");
-      setStatValue("admin-stat-users", s.total_users ?? "—");
-      setStatValue("admin-stat-tickets", s.tickets_today ?? "—");
-      setStatValue("admin-stat-revenue", s.revenue_month ? `${s.revenue_month}€` : "—");
-    }
+  const [globalStats, pendingOrders, botStatus] = await Promise.allSettled([
+    apiFetch("/internal/admin/stats", { auth: true }),
+    apiFetch("/internal/orders/pending", { auth: true }),
+    apiFetch("/internal/bot/status", { auth: true }),
+  ]);
 
-    if (pendingOrders.status === "fulfilled") {
-      renderOrders(pendingOrders.value.orders || []);
+  // Stats globales
+  if (globalStats.status === "fulfilled") {
+    const s = globalStats.value;
+    setStatValue("admin-stat-servers", s.total_guilds ?? "—");
+    setStatValue("admin-stat-users", s.total_users ?? "—");
+    setStatValue("admin-stat-tickets", s.tickets_today ?? "—");
+    setStatValue("admin-stat-revenue", s.revenue_month ? `${s.revenue_month}€` : "—");
+    // Badge orders dans la sidebar
+    const badge = document.querySelector('[data-badge="orders"]');
+    if (badge && s.orders_pending != null) badge.textContent = s.orders_pending;
+  } else {
+    console.warn("SuperAdmin stats error:", globalStats.reason?.message);
+  }
+
+  // Commandes en attente
+  if (pendingOrders.status === "fulfilled") {
+    renderOrders(pendingOrders.value.orders || [], "admin-orders-list");
+  } else {
+    if (ordersContainer) ordersContainer.innerHTML = `<div style="color:var(--red);font-size:13px;text-align:center;padding:24px">❌ Erreur chargement commandes</div>`;
+  }
+
+  // Statut bot (uptime + version)
+  if (botStatus.status === "fulfilled") {
+    const b = botStatus.value;
+    const uptimeEl = document.getElementById("admin-bot-uptime");
+    const versionEl = document.getElementById("admin-bot-version");
+    if (uptimeEl && b.uptime_sec != null) {
+      const h = Math.floor(b.uptime_sec / 3600);
+      const m = Math.floor((b.uptime_sec % 3600) / 60);
+      uptimeEl.textContent = `${h}h ${m}m`;
     }
-  } catch (e) {
-    console.warn("SuperAdmin data:", e);
+    if (versionEl && b.version) versionEl.textContent = b.version;
   }
 }
 
