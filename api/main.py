@@ -11,6 +11,19 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+# ── Charger .env AVANT tout le reste ────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    for _p in [Path(".env"), Path(__file__).parent.parent / ".env", Path(__file__).parent / ".env"]:
+        if _p.exists():
+            load_dotenv(dotenv_path=_p, override=True)
+            print(f"[dotenv] Charge depuis {_p.resolve()}")
+            break
+    else:
+        print("[dotenv] Aucun .env trouve — variables lues depuis le systeme")
+except ImportError:
+    print("[dotenv] Installe python-dotenv : pip install python-dotenv")
+
 # Créer dossier logs s'il n'existe pas
 Path('logs').mkdir(exist_ok=True)
 
