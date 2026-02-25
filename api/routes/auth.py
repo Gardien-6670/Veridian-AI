@@ -33,19 +33,23 @@ def _get_redirect_uri() -> str:
     """
     URI de redirection OAuth2.
     DOIT pointer vers l'API FastAPI (api.veridiancloud.xyz), pas vers le front.
-    Configurez DISCORD_REDIRECT_URI=https://api.veridiancloud.xyz:/auth/callback dans .env
+    Configurez DISCORD_REDIRECT_URI=https://api.veridiancloud.xyz/auth/callback dans .env
     et enregistrez cette meme URI dans Discord Developer Portal > OAuth2 > Redirects.
     """
     explicit = os.getenv("DISCORD_REDIRECT_URI")
     if explicit:
         return explicit
     # Fallback : construit depuis API_DOMAIN
-    api_domain = os.getenv("API_DOMAIN", "api.veridiancloud.xyz:201")
+    api_domain = os.getenv("API_DOMAIN", "api.veridiancloud.xyz")
     return f"https://{api_domain}/auth/callback"
 
 
 def _get_dashboard_url() -> str:
-    return os.getenv("DASHBOARD_URL", "https://veridiancloud.xyz/dashboard")
+    # Cherche d'abord DASHBOARD_URL, sinon construit depuis le domaine
+    url = os.getenv("DASHBOARD_URL")
+    if url:
+        return url
+    return "https://veridiancloud.xyz/dashboard.html"
 
 
 def get_active_guild_ids() -> list:
@@ -213,7 +217,7 @@ async def discord_callback(
     jwt_token = _create_jwt(user_id, username, is_super_admin)
     _save_session(user_id, username, data["access_token"], jwt_token)
 
-    logger.info(f"OAuth OK: {username} ({user_id}) super_admin={is_super_admin}")
+    logger.info(f"OAuth OK: {username} ({user_id}) super_admin={is_super_admin} -> redirect: {dashboard_url}?token=...")
 
     # Redirection vers le FRONT avec le token en parametre URL
     # Le JS du dashboard recoit le token depuis window.location.search
