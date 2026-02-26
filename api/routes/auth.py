@@ -301,6 +301,21 @@ async def exchange_temp_code(request: Request):
 
     logger.info(f"Temp code echange: {data['user'].get('username')}")
 
+    # Ensure a DB session row exists for this JWT (some older DB schemas or strict SQL modes
+    # could cause the callback insert to fail, which would then make /internal/* return 401).
+    try:
+        if not DashboardSessionModel.get_by_token(data["jwt"]):
+            u = data.get("user") or {}
+            DashboardSessionModel.create(
+                discord_user_id=int(u.get("id") or 0),
+                discord_username=str(u.get("username") or "Unknown"),
+                access_token="",
+                jwt_token=data["jwt"],
+                expires_at=datetime.utcnow() + timedelta(days=7),
+            )
+    except Exception as e:
+        logger.warning(f"Dashboard session ensure failed: {e}")
+
     return JSONResponse(
         headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
         content={

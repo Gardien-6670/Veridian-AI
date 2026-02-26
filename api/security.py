@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import secrets
+from pathlib import Path
 from loguru import logger
 
 
@@ -29,6 +30,43 @@ def _is_weak_secret(value: str | None, *, min_len: int = 32) -> bool:
     return False
 
 
+def _project_root() -> Path:
+    # api/security.py -> api/ -> project root
+    return Path(__file__).resolve().parents[1]
+
+
+def _load_or_create_persistent_secret(env_key: str, filename: str) -> str | None:
+    """
+    Dev-only helper: persist a generated secret to disk so multiple workers/processes
+    share the same secret (avoids random 401 when JWT is signed in worker A and verified in worker B).
+    """
+    try:
+        secret = os.getenv(env_key)
+        if secret and not _is_weak_secret(secret):
+            return secret
+
+        secret_file = _project_root() / "logs" / filename
+        secret_file.parent.mkdir(parents=True, exist_ok=True)
+
+        if secret_file.exists():
+            val = secret_file.read_text(encoding="utf-8", errors="replace").strip()
+            if not _is_weak_secret(val):
+                os.environ[env_key] = val
+                return val
+
+        generated = secrets.token_urlsafe(48)
+        secret_file.write_text(generated, encoding="utf-8")
+        try:
+            secret_file.chmod(0o600)
+        except Exception:
+            pass
+        os.environ[env_key] = generated
+        return generated
+    except Exception as e:
+        logger.warning(f"{env_key} persistent secret fallback failed: {e}")
+        return None
+
+
 def get_jwt_secret() -> str:
     """
     Returns a JWT secret.
@@ -43,10 +81,16 @@ def get_jwt_secret() -> str:
     if is_production():
         raise RuntimeError("JWT_SECRET manquant ou trop faible (production).")
 
-    # Dev fallback: keep the app running without silently using a known weak value.
+    # Dev fallback: persist the secret to disk so it is stable across workers.
+    persisted = _load_or_create_persistent_secret("JWT_SECRET", ".jwt_secret")
+    if persisted:
+        logger.warning("JWT_SECRET manquant/faible: secret persistant genere/charge (mode developpement).")
+        return persisted
+
+    # Last resort: ephemeral, per-process.
     generated = secrets.token_urlsafe(48)
     os.environ["JWT_SECRET"] = generated
-    logger.warning("JWT_SECRET manquant/faible: secret ephemere genere pour le mode developpement.")
+    logger.warning("JWT_SECRET manquant/faible: secret ephemere genere (mode developpement).")
     return generated
 
 
@@ -64,9 +108,14 @@ def get_internal_api_secret() -> str:
     if is_production():
         raise RuntimeError("INTERNAL_API_SECRET manquant ou trop faible (production).")
 
+    persisted = _load_or_create_persistent_secret("INTERNAL_API_SECRET", ".internal_api_secret")
+    if persisted:
+        logger.warning("INTERNAL_API_SECRET manquant/faible: secret persistant genere/charge (mode developpement).")
+        return persisted
+
     generated = secrets.token_urlsafe(48)
     os.environ["INTERNAL_API_SECRET"] = generated
-    logger.warning("INTERNAL_API_SECRET manquant/faible: secret ephemere genere pour le mode developpement.")
+    logger.warning("INTERNAL_API_SECRET manquant/faible: secret ephemere genere (mode developpement).")
     return generated
 
 
@@ -84,4 +133,3 @@ def security_headers() -> dict[str, str]:
         "Cache-Control": "no-store",
         "Pragma": "no-cache",
     }
-
