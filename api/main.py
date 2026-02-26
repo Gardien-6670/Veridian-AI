@@ -53,6 +53,16 @@ async def lifespan(app: FastAPI):
             # Fail-fast: OAuth login would be broken and security posture unclear.
             raise RuntimeError(f"Variables d'environnement manquantes en production: {', '.join(missing)}")
 
+    # Auto DB migrations (tables/views/patches) from `database/`.
+    try:
+        from api.db_migrate import ensure_database_schema
+        ensure_database_schema()
+    except Exception as e:
+        logger.error(f"[db] Migration a echoue: {e}")
+        # In production, schema drift breaks auth/session checks -> fail fast.
+        if is_production():
+            raise
+
     yield
 
 app = FastAPI(

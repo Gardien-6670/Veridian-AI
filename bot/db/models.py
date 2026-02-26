@@ -776,12 +776,25 @@ class DashboardSessionModel:
     def get_by_token(jwt_token: str) -> Optional[Dict]:
         with get_db_context() as conn:
             cursor = conn.cursor(dictionary=True)
-            cursor.execute(
-                f"SELECT * FROM {DB_TABLE_PREFIX}dashboard_sessions "
-                f"WHERE jwt_token = %s AND is_revoked = 0 AND expires_at > NOW()",
-                (jwt_token,)
-            )
-            return cursor.fetchone()
+            try:
+                cursor.execute(
+                    f"SELECT * FROM {DB_TABLE_PREFIX}dashboard_sessions "
+                    f"WHERE jwt_token = %s AND is_revoked = 0 AND expires_at > NOW()",
+                    (jwt_token,)
+                )
+                return cursor.fetchone()
+            except Exception as e:
+                # Backward compatibility: older schemas didn't have `is_revoked`.
+                # In that case, fall back to simple expiry validation.
+                msg = str(e).lower()
+                if "unknown column" in msg and "is_revoked" in msg:
+                    cursor.execute(
+                        f"SELECT * FROM {DB_TABLE_PREFIX}dashboard_sessions "
+                        f"WHERE jwt_token = %s AND expires_at > NOW()",
+                        (jwt_token,)
+                    )
+                    return cursor.fetchone()
+                raise
 
     @staticmethod
     def revoke_token(jwt_token: str) -> bool:
@@ -795,6 +808,18 @@ class DashboardSessionModel:
                 )
                 return True
             except Exception as e:
+                msg = str(e).lower()
+                if "unknown column" in msg and "is_revoked" in msg:
+                    # Old schema: no `is_revoked` flag -> delete row to revoke.
+                    try:
+                        cursor.execute(
+                            f"DELETE FROM {DB_TABLE_PREFIX}dashboard_sessions WHERE jwt_token = %s",
+                            (jwt_token,)
+                        )
+                        return True
+                    except Exception as e2:
+                        logger.error(f"Erreur suppression session (fallback revoke): {e2}")
+                        return False
                 logger.error(f"Erreur revocation token: {e}")
                 return False
 

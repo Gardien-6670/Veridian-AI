@@ -319,8 +319,14 @@ async def get_current_user(request: Request):
     token = auth_header[7:]
     try:
         # Enforce server-side revocation/expiry via DB session.
-        if not DashboardSessionModel.get_by_token(token):
-            raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
+        try:
+            if not DashboardSessionModel.get_by_token(token):
+                raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Session check error: {e}")
+            raise HTTPException(status_code=401, detail="Session invalide")
 
         secret  = get_jwt_secret()
         payload = jwt.decode(
@@ -353,7 +359,11 @@ async def get_current_user_guilds(request: Request):
         raise HTTPException(status_code=401, detail="Header Authorization manquant")
     token = auth_header[7:]
 
-    session_row = DashboardSessionModel.get_by_token(token)
+    try:
+        session_row = DashboardSessionModel.get_by_token(token)
+    except Exception as e:
+        logger.warning(f"Session check error: {e}")
+        raise HTTPException(status_code=401, detail="Session invalide")
     if not session_row:
         raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
 
