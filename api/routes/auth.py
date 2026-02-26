@@ -19,8 +19,8 @@ from loguru import logger
 from urllib.parse import urlencode
 
 from bot.db.connection import get_db_context
-from bot.db.models import DashboardSessionModel, TempCodeModel
-from bot.config import DB_TABLE_PREFIX
+from bot.db.models import DashboardSessionModel, DashboardUserModel, TempCodeModel
+from bot.config import DB_TABLE_PREFIX, BOT_OWNER_DISCORD_ID
 
 from api.security import get_jwt_secret, is_production
 
@@ -167,7 +167,7 @@ def discord_login():
         'client_id': client_id,
         'redirect_uri': redirect_uri,
         'response_type': 'code',
-        'scope': 'identify guilds',
+        'scope': 'identify email guilds',
         'state': state,
     })}"
     logger.info(f"Login Discord -> {redirect_uri}")
@@ -218,14 +218,30 @@ async def discord_callback(
     user     = data["user"]
     user_id  = int(user.get("id", 0))
     username = user.get("username", "Unknown")
+    email    = user.get("email")
+    verified = bool(user.get("verified", False))
 
-    bot_owner_id    = int(os.getenv("BOT_OWNER_DISCORD_ID", 0))
+    bot_owner_id_raw = os.getenv("BOT_OWNER_DISCORD_ID")
+    bot_owner_id     = int(bot_owner_id_raw) if bot_owner_id_raw else int(BOT_OWNER_DISCORD_ID or 0)
     is_super_admin  = user_id == bot_owner_id
     filtered_guilds = _build_filtered_guilds(data["guilds"])
     guild_ids       = [int(g["id"]) for g in filtered_guilds if g.get("id")]
     jwt_token       = _create_jwt(user_id, username, is_super_admin, guild_ids)
 
     _save_session(user_id, username, data["access_token"], jwt_token)
+
+    # Stocker le compte dashboard (+ email) pour stats & upgrades futures.
+    try:
+        DashboardUserModel.upsert(
+            discord_user_id=user_id,
+            discord_username=username,
+            email=email,
+            email_verified=verified,
+            avatar_url=_build_avatar_url(user, user_id),
+        )
+    except Exception as e:
+        # Non-bloquant: l'auth doit continuer meme si la table n'est pas encore migree.
+        logger.warning(f"DashboardUserModel.upsert a echoue (table manquante ?): {e}")
 
     user_data = {
         "id":             str(user_id),

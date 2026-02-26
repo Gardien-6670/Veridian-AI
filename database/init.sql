@@ -183,6 +183,24 @@ CREATE TABLE IF NOT EXISTS vai_knowledge_base (
 -- VAI_DASHBOARD_SESSIONS - Sessions OAuth2 Discord pour le dashboard
 -- ============================================================================
 
+-- ============================================================================
+-- VAI_DASHBOARD_USERS - Comptes dashboard (OAuth Discord) + email
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS vai_dashboard_users (
+    discord_user_id     BIGINT PRIMARY KEY COMMENT 'Discord User ID',
+    discord_username    VARCHAR(100),
+    email               VARCHAR(255),
+    email_verified      TINYINT(1) DEFAULT 0,
+    avatar_url          VARCHAR(255),
+    first_login_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login_at       TIMESTAMP NULL,
+    created_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_email (email),
+    KEY idx_last_login (last_login_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS vai_dashboard_sessions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     discord_user_id BIGINT,

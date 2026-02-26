@@ -711,6 +711,46 @@ class TranslationCacheModel:
 # VAI_DASHBOARD_SESSIONS
 # ============================================================================
 
+class DashboardUserModel:
+
+    @staticmethod
+    def upsert(discord_user_id: int, discord_username: str = None,
+               email: str = None, email_verified: bool = False,
+               avatar_url: str = None) -> bool:
+        with get_db_context() as conn:
+            cursor = conn.cursor()
+            try:
+                query = f"""
+                    INSERT INTO {DB_TABLE_PREFIX}dashboard_users
+                    (discord_user_id, discord_username, email, email_verified, avatar_url, last_login_at)
+                    VALUES (%s, %s, %s, %s, %s, NOW())
+                    ON DUPLICATE KEY UPDATE
+                        discord_username = VALUES(discord_username),
+                        email = VALUES(email),
+                        email_verified = VALUES(email_verified),
+                        avatar_url = VALUES(avatar_url),
+                        last_login_at = NOW()
+                """
+                cursor.execute(query, (
+                    discord_user_id,
+                    discord_username,
+                    email,
+                    int(bool(email_verified)),
+                    avatar_url,
+                ))
+                return True
+            except Exception as e:
+                logger.error(f"Erreur upsert dashboard user: {e}")
+                return False
+
+    @staticmethod
+    def count() -> int:
+        with get_db_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}dashboard_users")
+            return int(cursor.fetchone()[0])
+
+
 class DashboardSessionModel:
 
     @staticmethod

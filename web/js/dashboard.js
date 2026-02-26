@@ -9,8 +9,7 @@
 // CONFIG
 // ─────────────────────────────────────────────────────────────
 const API_BASE = "https://api.veridiancloud.xyz:201";
-// redirect_uri DOIT correspondre exactement à DISCORD_REDIRECT_URI dans le .env
-// et à ce qui est enregistré dans le portail Discord Developer
+
 const DISCORD_REDIRECT_URI = "https://api.veridiancloud.xyz:201/auth/callback";
 
 // ─────────────────────────────────────────────────────────────
@@ -908,7 +907,10 @@ async function loadSuperAdminData() {
     setStatValue("admin-stat-servers", s.total_guilds ?? "—");
     setStatValue("admin-stat-users", s.total_users ?? "—");
     setStatValue("admin-stat-tickets", s.tickets_today ?? "—");
-    setStatValue("admin-stat-revenue", s.revenue_month ? `${s.revenue_month}€` : "—");
+    setStatValue(
+      "admin-stat-revenue",
+      s.revenue_month == null ? "—" : `${Number(s.revenue_month).toFixed(2)}€`
+    );
     // Badge orders dans la sidebar
     const badge = document.querySelector('[data-badge="orders"]');
     if (badge && s.orders_pending != null) badge.textContent = s.orders_pending;

@@ -12,7 +12,7 @@ from bot.db.models import (
     OrderModel, PaymentModel, KnowledgeBaseModel, AuditLogModel,
     BotStatusModel, TicketMessageModel
 )
-from bot.config import PLAN_LIMITS
+from bot.config import PLAN_LIMITS, DB_TABLE_PREFIX
 from loguru import logger
 import os
 import jwt as pyjwt
@@ -532,21 +532,64 @@ def get_global_stats():
     try:
         from bot.db.connection import get_db_context
         with get_db_context() as conn:
-            cursor = conn.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM vai_dashboard_stats")
-            stats = cursor.fetchone() or {}
+            cursor = conn.cursor()
+
+            def scalar(query: str, params: tuple = ()) -> float | int:
+                cursor.execute(query, params)
+                row = cursor.fetchone()
+                return 0 if not row else row[0]
+
+            total_guilds = int(scalar(f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}guilds"))
+
+            # "Utilisateurs" = comptes dashboard (OAuth) — fallback sur sessions/anciens schemas.
+            dashboard_users_count = None
+            session_users_count = None
+            try:
+                dashboard_users_count = int(scalar(f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}dashboard_users"))
+            except Exception:
+                pass
+
+            try:
+                session_users_count = int(scalar(
+                    f"SELECT COUNT(DISTINCT discord_user_id) FROM {DB_TABLE_PREFIX}dashboard_sessions"
+                ))
+            except Exception:
+                pass
+
+            if dashboard_users_count is not None:
+                total_users = max(dashboard_users_count, session_users_count or 0)
+            elif session_users_count is not None:
+                total_users = session_users_count
+            else:
+                total_users = int(scalar(f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}users"))
+
+            tickets_today = int(scalar(
+                f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}tickets WHERE DATE(opened_at) = CURDATE()"
+            ))
+            orders_pending = int(scalar(
+                f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}orders WHERE status = 'pending'"
+            ))
+            revenue_month = float(scalar(
+                f"SELECT COALESCE(SUM(amount), 0) FROM {DB_TABLE_PREFIX}payments "
+                f"WHERE status = 'completed' "
+                f"AND YEAR(paid_at) = YEAR(CURDATE()) "
+                f"AND MONTH(paid_at) = MONTH(CURDATE())"
+            ))
+            active_subs = int(scalar(
+                f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}subscriptions WHERE is_active = 1"
+            ))
 
         bot_status = BotStatusModel.get() or {}
 
         return {
-            "total_guilds":   int(stats.get("total_guilds", 0)),
-            "total_users":    int(stats.get("total_users", 0)),
-            "tickets_today":  int(stats.get("tickets_today", 0)),
-            "orders_pending": int(stats.get("orders_pending", 0)),
-            "revenue_month":  float(stats.get("revenue_month", 0)),
-            "active_subs":    int(stats.get("active_subs", 0)),
+            "total_guilds":   total_guilds,
+            "total_users":    total_users,
+            "tickets_today":  tickets_today,
+            "orders_pending": orders_pending,
+            "revenue_month":  revenue_month,
+            "active_subs":    active_subs,
             "bot_uptime_sec": bot_status.get("uptime_sec", 0),
-            "bot_version":    bot_status.get("version", "?")
+            "bot_version":    bot_status.get("version", "?"),
         }
     except Exception as e:
         logger.error(f"Erreur admin stats: {e}")

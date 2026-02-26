@@ -203,6 +203,25 @@ CREATE TABLE IF NOT EXISTS vai_knowledge_base (
 -- VAI_DASHBOARD_SESSIONS - Sessions OAuth2 Discord pour le dashboard
 -- ============================================================================
 
+-- ============================================================================
+-- VAI_DASHBOARD_USERS - Comptes dashboard (OAuth Discord) + email
+-- Objectif : compter les utilisateurs dashboard et preparer les upgrades.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS vai_dashboard_users (
+    discord_user_id     BIGINT PRIMARY KEY          COMMENT 'Discord User ID',
+    discord_username    VARCHAR(100),
+    email               VARCHAR(255),
+    email_verified      TINYINT(1)      DEFAULT 0,
+    avatar_url          VARCHAR(255),
+    first_login_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    last_login_at       TIMESTAMP       NULL,
+    created_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_email       (email),
+    KEY idx_last_login  (last_login_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS vai_dashboard_sessions (
     id                  INT AUTO_INCREMENT PRIMARY KEY,
     discord_user_id     BIGINT,
@@ -292,11 +311,13 @@ ORDER BY o.created_at DESC;
 CREATE OR REPLACE VIEW vai_dashboard_stats AS
 SELECT
     (SELECT COUNT(*) FROM vai_guilds)                                              AS total_guilds,
-    (SELECT COUNT(*) FROM vai_users)                                               AS total_users,
+    (SELECT COUNT(*) FROM vai_dashboard_users)                                     AS total_users,
     (SELECT COUNT(*) FROM vai_tickets WHERE DATE(opened_at) = CURDATE())           AS tickets_today,
     (SELECT COUNT(*) FROM vai_orders  WHERE status = 'pending')                    AS orders_pending,
     (SELECT COALESCE(SUM(amount),0) FROM vai_payments
-      WHERE status = 'completed' AND MONTH(paid_at) = MONTH(NOW()))               AS revenue_month,
+      WHERE status = 'completed'
+        AND YEAR(paid_at) = YEAR(CURDATE())
+        AND MONTH(paid_at) = MONTH(CURDATE()))                                    AS revenue_month,
     (SELECT COUNT(*) FROM vai_subscriptions WHERE is_active = 1)                   AS active_subs;
 
 -- ============================================================================
