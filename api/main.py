@@ -2,6 +2,7 @@
 API FastAPI interne - Communication entre le bot et le dashboard
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,10 +42,24 @@ from bot.config import VERSION
 from api.routes.auth import router as auth_router
 from api.routes.internal import router as internal_router   # ← FIX: manquait dans l'original
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if is_production():
+        missing = []
+        for var in ("DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "DASHBOARD_URL"):
+            if not os.getenv(var):
+                missing.append(var)
+        if missing:
+            # Fail-fast: OAuth login would be broken and security posture unclear.
+            raise RuntimeError(f"Variables d'environnement manquantes en production: {', '.join(missing)}")
+
+    yield
+
 app = FastAPI(
     title=f"Veridian AI {VERSION} - API Interne",
     description="API pour la communication bot ↔ dashboard",
-    version=VERSION
+    version=VERSION,
+    lifespan=lifespan,
 )
 
 # ============================================================================
@@ -55,18 +70,6 @@ app = FastAPI(
 # In dev, these may be generated ephemerally (see api/security.py).
 INTERNAL_API_SECRET = get_internal_api_secret()
 _JWT_SECRET = get_jwt_secret()
-
-
-@app.on_event("startup")
-async def _startup_security_checks():
-    if is_production():
-        missing = []
-        for var in ("DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "DASHBOARD_URL"):
-            if not os.getenv(var):
-                missing.append(var)
-        if missing:
-            # Fail-fast: OAuth login would be broken and security posture unclear.
-            raise RuntimeError(f"Variables d'environnement manquantes en production: {', '.join(missing)}")
 
 
 @app.middleware("http")
