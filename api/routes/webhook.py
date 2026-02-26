@@ -20,6 +20,8 @@ router = APIRouter(prefix="/webhook", tags=["webhook"])
 def verify_oxapay_signature(payload: bytes, signature: str) -> bool:
     """Vérifier la signature HMAC-SHA256 d'OxaPay"""
     secret = os.getenv("OXAPAY_WEBHOOK_SECRET", "")
+    if not secret or not signature:
+        return False
     expected_signature = hmac.new(
         secret.encode(), 
         payload, 

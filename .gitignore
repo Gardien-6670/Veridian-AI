@@ -89,7 +89,6 @@ dist/
 build/
 
 # Misc
-.env.example  # Keep in repo but track
+!.env.example
 config.local.py
 secrets.json
-.env

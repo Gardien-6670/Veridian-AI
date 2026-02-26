@@ -19,6 +19,8 @@ import jwt as pyjwt
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
+from api.security import get_jwt_secret
+
 
 # ============================================================================
 # Auth middleware
@@ -27,8 +29,14 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 def _decode_jwt(token: str) -> dict:
     """Decode and validate a JWT token. Returns payload or raises HTTPException."""
     try:
-        secret = os.getenv("JWT_SECRET", "change_me_in_production")
-        return pyjwt.decode(token, secret, algorithms=["HS256"])
+        secret = get_jwt_secret()
+        return pyjwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            audience="veridian-dashboard",
+            issuer="veridian-api",
+        )
     except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expire")
     except pyjwt.InvalidTokenError:
@@ -45,16 +53,38 @@ def verify_internal_auth(request: Request, x_api_secret: str = Header(None)) -> 
     # 1. Secret interne (bot ou service serveur)
     expected = os.getenv("INTERNAL_API_SECRET")
     if x_api_secret and expected and x_api_secret == expected:
+        request.state.user_id = 0
+        request.state.is_super_admin = True
+        request.state.guild_ids = None
         return {"is_bot": True, "is_super_admin": True, "user_id": 0}
 
     # 2. JWT Bearer (dashboard utilisateur)
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
-        payload = _decode_jwt(auth_header[7:])
+        token = auth_header[7:]
+
+        # Enforce server-side revocation/expiry via DB.
+        try:
+            from bot.db.models import DashboardSessionModel
+            if not DashboardSessionModel.get_by_token(token):
+                raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Session check error: {e}")
+            raise HTTPException(status_code=401, detail="Session invalide")
+
+        payload = _decode_jwt(token)
+        user_id = payload.get("sub", 0)
+        guild_ids = payload.get("guild_ids", [])
+        request.state.user_id = user_id
+        request.state.is_super_admin = bool(payload.get("is_super_admin", False))
+        request.state.guild_ids = guild_ids
         return {
             "is_bot": False,
-            "is_super_admin": bool(payload.get("is_super_admin", False)),
-            "user_id": payload.get("sub", 0),
+            "is_super_admin": request.state.is_super_admin,
+            "user_id": user_id,
+            "guild_ids": guild_ids,
         }
 
     raise HTTPException(status_code=401, detail="Unauthorized")
@@ -68,6 +98,39 @@ def verify_super_admin(request: Request, x_api_secret: str = Header(None)) -> di
     auth = verify_internal_auth(request, x_api_secret)
     if not auth.get("is_super_admin"):
         raise HTTPException(status_code=403, detail="Acces reserve au Super Admin")
+    return auth
+
+
+def verify_guild_access(
+    guild_id: int,
+    request: Request,
+    x_api_secret: str = Header(None),
+) -> dict:
+    """
+    Ensures the authenticated dashboard user is allowed to access `guild_id`.
+    Bot/internal secret bypasses this check.
+    """
+    auth = verify_internal_auth(request, x_api_secret)
+    if auth.get("is_bot") or auth.get("is_super_admin"):
+        return auth
+
+    allowed = auth.get("guild_ids") or []
+    try:
+        gid = int(guild_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="guild_id invalide")
+
+    # Normalize allowed guild ids to ints.
+    norm_allowed = set()
+    for x in allowed:
+        try:
+            norm_allowed.add(int(x))
+        except Exception:
+            pass
+
+    if gid not in norm_allowed:
+        raise HTTPException(status_code=403, detail="Acces refuse a ce serveur")
+
     return auth
 
 
@@ -130,7 +193,7 @@ def health_check():
 # Guild config - lu et ecrit exclusivement par le dashboard
 # ============================================================================
 
-@router.get("/guild/{guild_id}/config", dependencies=[Depends(verify_internal_auth)])
+@router.get("/guild/{guild_id}/config", dependencies=[Depends(verify_guild_access)])
 def get_guild_config(guild_id: int):
     guild = GuildModel.get(guild_id)
     if not guild:
@@ -138,7 +201,7 @@ def get_guild_config(guild_id: int):
     return guild
 
 
-@router.put("/guild/{guild_id}/config", dependencies=[Depends(verify_internal_auth)])
+@router.put("/guild/{guild_id}/config", dependencies=[Depends(verify_guild_access)])
 def update_guild_config(guild_id: int, body: GuildConfigBody, request: Request):
     guild = GuildModel.get(guild_id)
     if not guild:
@@ -172,7 +235,7 @@ def update_guild_config(guild_id: int, body: GuildConfigBody, request: Request):
 # Tickets
 # ============================================================================
 
-@router.get("/guild/{guild_id}/tickets", dependencies=[Depends(verify_internal_auth)])
+@router.get("/guild/{guild_id}/tickets", dependencies=[Depends(verify_guild_access)])
 def get_guild_tickets(guild_id: int, status: Optional[str] = None,
                       page: int = 1, limit: int = 50):
     tickets = TicketModel.get_by_guild(guild_id, status=status, page=page, limit=limit)
@@ -187,18 +250,41 @@ def get_guild_tickets(guild_id: int, status: Optional[str] = None,
 
 
 @router.get("/ticket/{ticket_id}", dependencies=[Depends(verify_internal_auth)])
-def get_ticket(ticket_id: int):
+def get_ticket(ticket_id: int, request: Request):
     ticket = TicketModel.get(ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    # Enforce ticket guild access for non-super-admin users.
+    if not getattr(request.state, "is_super_admin", False):
+        allowed = getattr(request.state, "guild_ids", None)
+        if allowed is not None:
+            norm_allowed = set()
+            for x in (allowed or []):
+                try:
+                    norm_allowed.add(int(x))
+                except Exception:
+                    pass
+            if int(ticket.get("guild_id", 0)) not in norm_allowed:
+                raise HTTPException(status_code=403, detail="Acces refuse a ce ticket")
     return ticket
 
 
 @router.get("/ticket/{ticket_id}/transcript", dependencies=[Depends(verify_internal_auth)])
-def get_ticket_transcript(ticket_id: int):
+def get_ticket_transcript(ticket_id: int, request: Request):
     ticket = TicketModel.get(ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    if not getattr(request.state, "is_super_admin", False):
+        allowed = getattr(request.state, "guild_ids", None)
+        if allowed is not None:
+            norm_allowed = set()
+            for x in (allowed or []):
+                try:
+                    norm_allowed.add(int(x))
+                except Exception:
+                    pass
+            if int(ticket.get("guild_id", 0)) not in norm_allowed:
+                raise HTTPException(status_code=403, detail="Acces refuse a ce ticket")
     messages = TicketMessageModel.get_by_ticket(ticket_id)
     return {
         "ticket_id":  ticket_id,
@@ -217,6 +303,17 @@ def close_ticket_dashboard(ticket_id: int, request: Request):
     ticket = TicketModel.get(ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    if not getattr(request.state, "is_super_admin", False):
+        allowed = getattr(request.state, "guild_ids", None)
+        if allowed is not None:
+            norm_allowed = set()
+            for x in (allowed or []):
+                try:
+                    norm_allowed.add(int(x))
+                except Exception:
+                    pass
+            if int(ticket.get("guild_id", 0)) not in norm_allowed:
+                raise HTTPException(status_code=403, detail="Acces refuse a ce ticket")
     TicketModel.close(ticket_id, close_reason="Ferme depuis le dashboard")
     actor_id = getattr(request.state, "user_id", None)
     AuditLogModel.log(actor_id=actor_id or 0, action="ticket.close",
@@ -228,7 +325,7 @@ def close_ticket_dashboard(ticket_id: int, request: Request):
 # Stats guild
 # ============================================================================
 
-@router.get("/guild/{guild_id}/stats", dependencies=[Depends(verify_internal_auth)])
+@router.get("/guild/{guild_id}/stats", dependencies=[Depends(verify_guild_access)])
 def get_guild_stats(guild_id: int):
     open_tickets    = TicketModel.count_by_guild(guild_id, status="open")
     inprog_tickets  = TicketModel.count_by_guild(guild_id, status="in_progress")
@@ -350,7 +447,7 @@ def revoke_subscription(body: RevokeSubBody, request: Request):
 # Knowledge Base
 # ============================================================================
 
-@router.get("/guild/{guild_id}/kb", dependencies=[Depends(verify_internal_auth)])
+@router.get("/guild/{guild_id}/kb", dependencies=[Depends(verify_guild_access)])
 def get_kb(guild_id: int):
     entries = KnowledgeBaseModel.get_by_guild(guild_id)
     limit   = PLAN_LIMITS.get(
@@ -364,7 +461,7 @@ def get_kb(guild_id: int):
     }
 
 
-@router.post("/guild/{guild_id}/kb", dependencies=[Depends(verify_internal_auth)])
+@router.post("/guild/{guild_id}/kb", dependencies=[Depends(verify_guild_access)])
 def create_kb_entry(guild_id: int, body: KBEntryBody, request: Request):
     # Verifier la limite du plan
     sub   = SubscriptionModel.get(guild_id)
@@ -399,7 +496,7 @@ def create_kb_entry(guild_id: int, body: KBEntryBody, request: Request):
     return {"status": "success", "id": kb_id}
 
 
-@router.put("/guild/{guild_id}/kb/{kb_id}", dependencies=[Depends(verify_internal_auth)])
+@router.put("/guild/{guild_id}/kb/{kb_id}", dependencies=[Depends(verify_guild_access)])
 def update_kb_entry(guild_id: int, kb_id: int, body: KBEntryBody, request: Request):
     entry = KnowledgeBaseModel.get(kb_id)
     if not entry or entry["guild_id"] != guild_id:
@@ -413,7 +510,7 @@ def update_kb_entry(guild_id: int, kb_id: int, body: KBEntryBody, request: Reque
     return {"status": "success", "id": kb_id}
 
 
-@router.delete("/guild/{guild_id}/kb/{kb_id}", dependencies=[Depends(verify_internal_auth)])
+@router.delete("/guild/{guild_id}/kb/{kb_id}", dependencies=[Depends(verify_guild_access)])
 def delete_kb_entry(guild_id: int, kb_id: int, request: Request):
     entry = KnowledgeBaseModel.get(kb_id)
     if not entry or entry["guild_id"] != guild_id:

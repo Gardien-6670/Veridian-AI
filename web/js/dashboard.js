@@ -28,6 +28,7 @@ let state = {
 // INIT
 // ─────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
+  bindStaticActions();
   initApp();
   initNav();
   initKB();
@@ -39,6 +40,67 @@ document.addEventListener("DOMContentLoaded", () => {
   initTicketSearch();
   updateTopbarDate();
 });
+
+function bindStaticActions() {
+  // Non-inline event handlers (required for strict CSP).
+  const loginBtn = document.getElementById("login-discord-btn");
+  if (loginBtn) loginBtn.addEventListener("click", loginWithDiscord);
+
+  document.addEventListener("click", (e) => {
+    const nav = e.target.closest("[data-nav]");
+    if (nav) {
+      navigateTo(nav.dataset.nav);
+      return;
+    }
+
+    const actionEl = e.target.closest("[data-action]");
+    if (actionEl) {
+      const action = actionEl.dataset.action;
+      if (action === "logout") return void logout();
+      if (action === "close-transcript") return void closeTranscriptModal();
+      if (action === "refresh-dashboard") return void loadDashboardStats();
+      if (action === "refresh-tickets") return void loadTickets();
+      if (action === "refresh-orders") return void loadOrders();
+      if (action === "refresh-superadmin") return void loadSuperAdminData();
+      if (action === "kb-cancel") {
+        const form = document.getElementById("kb-form");
+        if (form) form.style.display = "none";
+        return;
+      }
+      if (action === "admin-activate-sub") return void adminActivateSub();
+      if (action === "admin-revoke-sub") return void adminRevokeSub();
+    }
+
+    const ticketBtn = e.target.closest("[data-ticket-action]");
+    if (ticketBtn) {
+      const ticketId = parseInt(ticketBtn.dataset.ticketId, 10);
+      if (!Number.isFinite(ticketId)) return;
+      if (ticketBtn.dataset.ticketAction === "view") return void viewTicketTranscript(ticketId);
+      if (ticketBtn.dataset.ticketAction === "close") return void closeTicket(ticketId);
+    }
+
+    const orderBtn = e.target.closest("[data-order-action]");
+    if (orderBtn) {
+      const orderId = orderBtn.dataset.orderId;
+      const status = orderBtn.dataset.status;
+      if (!orderId || !status) return;
+      if (orderBtn.dataset.orderAction === "set-status") return void validateOrder(orderBtn, orderId, status);
+    }
+
+    const kbBtn = e.target.closest("[data-kb-action]");
+    if (kbBtn) {
+      const id = parseInt(kbBtn.dataset.kbId, 10);
+      if (!Number.isFinite(id)) return;
+      if (kbBtn.dataset.kbAction === "edit") return void editKBEntry(id);
+      if (kbBtn.dataset.kbAction === "delete") return void deleteKBEntry(id);
+    }
+  });
+
+  // Escape closes the transcript modal (if open).
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeTranscriptModal();
+  });
+}
 
 async function initApp() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -245,7 +307,21 @@ function populateServerSelector() {
   const avatar = display.querySelector(".server-avatar");
   if (avatar) {
     if (g.icon) {
-      avatar.innerHTML = `<img src="${g.icon}" style="width:28px;height:28px;border-radius:6px;object-fit:cover">`;
+      // Avoid innerHTML injection: build the element.
+      avatar.textContent = "";
+      const iconUrl = String(g.icon || "");
+      if (iconUrl.startsWith("https://")) {
+        const img = document.createElement("img");
+        img.src = iconUrl;
+        img.alt = "";
+        img.style.width = "28px";
+        img.style.height = "28px";
+        img.style.borderRadius = "6px";
+        img.style.objectFit = "cover";
+        avatar.appendChild(img);
+      } else {
+        avatar.textContent = g.name?.[0]?.toUpperCase() || "?";
+      }
     } else {
       avatar.textContent = g.name?.[0]?.toUpperCase() || "?";
     }
@@ -411,13 +487,14 @@ function renderLanguageStats(languages) {
     .slice(0, 5)
     .map((l) => {
       const code = l.user_language || l.lang || "?";
-      const pct = Math.round((l.count / total) * 100);
+      const pctRaw = Math.round(((l.count || 0) / total) * 100);
+      const pct = Math.max(0, Math.min(100, pctRaw));
       const flag = LANG_FLAGS[code] || "🌐";
       const name = LANG_NAMES[code] || code.toUpperCase();
       return `
       <div class="progress-item">
         <div class="progress-header">
-          <div class="progress-label">${flag} ${name}</div>
+          <div class="progress-label">${escHtml(flag)} ${escHtml(name)}</div>
           <div class="progress-pct">${pct}%</div>
         </div>
         <div class="progress-track">
@@ -450,7 +527,7 @@ async function loadTickets() {
     allTickets = data.tickets || [];
     renderTickets(allTickets);
   } catch (e) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:24px">Erreur: ${e.message}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:24px">Erreur: ${escHtml(e.message || String(e))}</td></tr>`;
   }
 }
 
@@ -468,17 +545,18 @@ function renderTickets(tickets) {
     const statusLabel = { open: "Ouvert", closed: "Fermé", in_progress: "En cours" }[t.status] || t.status;
     const date = t.opened_at ? new Date(t.opened_at).toLocaleDateString("fr-FR") : "—";
     const flag = LANG_FLAGS[t.user_language] || "🌐";
+    const tid = parseInt(String(t.id), 10);
     return `
     <tr>
-      <td><span class="mono-id">#${t.id}</span></td>
+      <td><span class="mono-id">#${Number.isFinite(tid) ? tid : escHtml(t.id)}</span></td>
       <td>${escHtml(t.user_username || String(t.user_id))}</td>
-      <td><span class="${statusClass}">${statusLabel}</span></td>
-      <td>${flag} ${(t.user_language || "").toUpperCase()}</td>
+      <td><span class="${statusClass}">${escHtml(statusLabel)}</span></td>
+      <td>${escHtml(flag)} ${escHtml((t.user_language || "").toUpperCase())}</td>
       <td>${escHtml(t.staff_username || "—")}</td>
       <td class="mono-grey">${date}</td>
       <td>
-        <button class="btn btn-ghost btn-sm btn-xs" onclick="viewTicketTranscript(${t.id})">📄 Voir</button>
-        ${t.status === "open" ? `<button class="btn btn-red btn-sm btn-xs" onclick="closeTicket(${t.id})" style="margin-left:4px">Fermer</button>` : ""}
+        <button class="btn btn-ghost btn-sm btn-xs" data-ticket-action="view" data-ticket-id="${Number.isFinite(tid) ? tid : ""}" type="button">📄 Voir</button>
+        ${t.status === "open" && Number.isFinite(tid) ? `<button class="btn btn-red btn-sm btn-xs" data-ticket-action="close" data-ticket-id="${tid}" type="button" style="margin-left:4px">Fermer</button>` : ""}
       </td>
     </tr>`;
   }).join("");
@@ -566,13 +644,15 @@ function renderOrders(orders, containerId = "orders-list") {
     return;
   }
 
-  container.innerHTML = orders.map((o) => `
-    <div class="order-card" id="order-${o.id}">
+  container.innerHTML = orders.map((o) => {
+    const orderKey = o.order_id || o.order_ref || o.id;
+    return `
+    <div class="order-card" data-order-key="${escAttr(orderKey)}">
       <div class="order-method-icon ${o.method === 'paypal' ? 'paypal' : o.method === 'giftcard' ? 'giftcard' : 'oxapay'}">
         ${o.method === 'paypal' ? '💳' : o.method === 'giftcard' ? '🎁' : '🔐'}
       </div>
       <div class="order-info">
-        <div class="order-id">${escHtml(o.order_ref || o.id)}</div>
+        <div class="order-id">${escHtml(orderKey)}</div>
         <div class="order-user">${escHtml(o.username || "—")} <span class="mono-grey">#${o.user_id}</span></div>
         <div class="order-meta">${escHtml(o.method)} · ${escHtml(o.plan)} · ${timeAgo(o.created_at)}</div>
       </div>
@@ -581,11 +661,12 @@ function renderOrders(orders, containerId = "orders-list") {
         <span class="pill pending" style="font-size:9px">EN ATTENTE</span>
       </div>
       <div class="order-actions">
-        <button class="btn btn-primary btn-sm" onclick="validateOrder(this,'${o.id}','paid')" title="Valider">✅</button>
-        <button class="btn btn-yellow btn-sm" onclick="validateOrder(this,'${o.id}','partial')" title="Montant incomplet">⚠️</button>
-        <button class="btn btn-red btn-sm" onclick="validateOrder(this,'${o.id}','rejected')" title="Rejeter">❌</button>
+        <button class="btn btn-primary btn-sm" data-order-action="set-status" data-order-id="${escAttr(orderKey)}" data-status="paid" type="button" title="Valider">✅</button>
+        <button class="btn btn-yellow btn-sm" data-order-action="set-status" data-order-id="${escAttr(orderKey)}" data-status="partial" type="button" title="Montant incomplet">⚠️</button>
+        <button class="btn btn-red btn-sm" data-order-action="set-status" data-order-id="${escAttr(orderKey)}" data-status="rejected" type="button" title="Rejeter">❌</button>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
 async function validateOrder(btn, orderId, status) {
@@ -597,13 +678,13 @@ async function validateOrder(btn, orderId, status) {
   siblings.forEach((b) => (b.disabled = true));
 
   try {
-    await apiFetch(`/internal/orders/${orderId}/status`, {
+    await apiFetch(`/internal/orders/${encodeURIComponent(orderId)}/status`, {
       method: "PUT",
       auth: true,
       body: { status },
     });
 
-    const card = document.getElementById(`order-${orderId}`);
+    const card = btn.closest(".order-card");
     if (card) {
       const pillClass = { paid: "paid", partial: "yellow", rejected: "rejected" }[status] || "";
       const label = { paid: "Payé ✅", partial: "Incomplet ⚠️", rejected: "Rejeté ❌" }[status] || status;
@@ -724,8 +805,8 @@ function renderKBEntries() {
       <div class="kb-question">${escHtml(e.question)}</div>
       <div class="kb-answer">${escHtml(e.answer)}</div>
       <div class="kb-footer">
-        <button class="btn btn-ghost btn-sm" onclick="editKBEntry(${e.id})">Modifier</button>
-        <button class="btn btn-red btn-sm" onclick="deleteKBEntry(${e.id})">Supprimer</button>
+        <button class="btn btn-ghost btn-sm" data-kb-action="edit" data-kb-id="${escAttr(e.id)}" type="button">Modifier</button>
+        <button class="btn btn-red btn-sm" data-kb-action="delete" data-kb-id="${escAttr(e.id)}" type="button">Supprimer</button>
       </div>
     </div>`).join("");
 }
@@ -853,6 +934,33 @@ async function loadSuperAdminData() {
       uptimeEl.textContent = `${h}h ${m}m`;
     }
     if (versionEl && b.version) versionEl.textContent = b.version;
+  }
+}
+
+async function adminActivateSub() {
+  const guildIdRaw = document.getElementById("admin-guild-id")?.value?.trim();
+  const plan = document.getElementById("admin-plan")?.value || "premium";
+  const guildId = parseInt(guildIdRaw, 10);
+  if (!Number.isFinite(guildId)) return showToast("Guild ID invalide", "warn");
+
+  try {
+    await apiPost("/internal/admin/activate-sub", { guild_id: guildId, plan, duration_days: 30 });
+    showToast(`Abonnement ${plan} activé pour ${guildId}`, "success");
+  } catch (e) {
+    showToast("Erreur: " + e.message, "error");
+  }
+}
+
+async function adminRevokeSub() {
+  const guildIdRaw = document.getElementById("admin-guild-id")?.value?.trim();
+  const guildId = parseInt(guildIdRaw, 10);
+  if (!Number.isFinite(guildId)) return showToast("Guild ID invalide", "warn");
+
+  try {
+    await apiPost("/internal/revoke-sub", { guild_id: guildId });
+    showToast(`Abonnement révoqué pour ${guildId}`, "success");
+  } catch (e) {
+    showToast("Erreur: " + e.message, "error");
   }
 }
 
@@ -1011,12 +1119,18 @@ function showToast(message, type = "info") {
 // ─────────────────────────────────────────────────────────────
 
 function escHtml(str) {
-  if (!str) return "";
+  if (str === null || str === undefined) return "";
   return String(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escAttr(str) {
+  // Same escaping as HTML text, plus single-quote (handled in escHtml).
+  return escHtml(str);
 }
 
 function timeAgo(dateStr) {

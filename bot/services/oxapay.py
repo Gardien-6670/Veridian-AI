@@ -75,6 +75,12 @@ class OxaPayClient:
         import json
 
         try:
+            if not self.webhook_secret:
+                logger.error("✗ OXAPAY_WEBHOOK_SECRET manquant: verification signature impossible")
+                return False
+            if not signature:
+                return False
+
             # Convertir payload en JSON pour le calcul du hash
             payload_json = json.dumps(payload, sort_keys=True)
             

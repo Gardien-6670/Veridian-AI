@@ -43,6 +43,9 @@ body {
   flex-direction: column;
 }
 
+.discord-login-btn:hover { background: #4752C4 !important; }
+.logout-icon:hover { opacity: 1 !important; }
+
 /* ── NOISE TEXTURE ── */
 body::before {
   content: '';

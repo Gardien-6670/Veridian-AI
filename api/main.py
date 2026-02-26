@@ -2,7 +2,7 @@
 API FastAPI interne - Communication entre le bot et le dashboard
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -11,24 +11,26 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+# Security helpers (no hardcoded production secrets)
+from api.security import get_internal_api_secret, get_jwt_secret, security_headers, is_production
+
 # ── Charger .env AVANT tout le reste ────────────────────────────────────────
 try:
     from dotenv import load_dotenv
     for _p in [Path(".env"), Path(__file__).parent.parent / ".env", Path(__file__).parent / ".env"]:
         if _p.exists():
             load_dotenv(dotenv_path=_p, override=True)
-            print(f"[dotenv] Charge depuis {_p.resolve()}")
+            logger.debug(f"[dotenv] Charge depuis {_p.resolve()}")
             break
     else:
-        print("[dotenv] Aucun .env trouve — variables lues depuis le systeme")
+        logger.debug("[dotenv] Aucun .env trouve — variables lues depuis le systeme")
 except ImportError:
-    print("[dotenv] Installe python-dotenv : pip install python-dotenv")
+    logger.warning("[dotenv] Installe python-dotenv : pip install python-dotenv")
 
 # Créer dossier logs s'il n'existe pas
 Path('logs').mkdir(exist_ok=True)
 
 # Configuration
-INTERNAL_API_SECRET = os.getenv('INTERNAL_API_SECRET', '718952f2f7daf24e6b9a7f2053c86fcc22c23b35d45165784d13ffdce591507b')
 API_DOMAIN = os.getenv('API_DOMAIN', 'api.veridiancloud.xyz')
 ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
 
@@ -46,6 +48,37 @@ app = FastAPI(
 )
 
 # ============================================================================
+# Security (headers + required secrets in prod)
+# ============================================================================
+
+# Ensure secrets are never "known defaults" in production.
+# In dev, these may be generated ephemerally (see api/security.py).
+INTERNAL_API_SECRET = get_internal_api_secret()
+_JWT_SECRET = get_jwt_secret()
+
+
+@app.on_event("startup")
+async def _startup_security_checks():
+    if is_production():
+        missing = []
+        for var in ("DISCORD_CLIENT_ID", "DISCORD_CLIENT_SECRET", "DASHBOARD_URL"):
+            if not os.getenv(var):
+                missing.append(var)
+        if missing:
+            # Fail-fast: OAuth login would be broken and security posture unclear.
+            raise RuntimeError(f"Variables d'environnement manquantes en production: {', '.join(missing)}")
+
+
+@app.middleware("http")
+async def _security_headers_middleware(request: Request, call_next):
+    resp = await call_next(request)
+    for k, v in security_headers().items():
+        # Don't override explicit headers set by routes.
+        resp.headers.setdefault(k, v)
+    return resp
+
+
+# ============================================================================
 # CORS Configuration
 # ============================================================================
 CORS_ORIGINS = [
@@ -59,8 +92,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    # Keep this explicit: avoids accidentally allowing exotic headers cross-site.
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-API-SECRET",
+        "X-WEBHOOK-SIGNATURE",
+        "X-Oxapay-Signature",
+    ],
 )
 
 # ============================================================================

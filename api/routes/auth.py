@@ -8,7 +8,7 @@ Flux :
   5. JWT stocke en localStorage uniquement — jamais dans une URL
 """
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Cookie
 from fastapi.responses import RedirectResponse, JSONResponse
 import aiohttp
 import os
@@ -16,10 +16,13 @@ import secrets
 from datetime import datetime, timedelta
 import jwt
 from loguru import logger
+from urllib.parse import urlencode
 
 from bot.db.connection import get_db_context
 from bot.db.models import DashboardSessionModel, TempCodeModel
 from bot.config import DB_TABLE_PREFIX
+
+from api.security import get_jwt_secret, is_production
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -114,13 +117,18 @@ def _build_avatar_url(user: dict, user_id: int) -> str:
     return f"https://cdn.discordapp.com/embed/avatars/{user_id % 5}.png"
 
 
-def _create_jwt(user_id: int, username: str, is_super_admin: bool) -> str:
-    secret = os.getenv("JWT_SECRET", "change_me_in_production")
+def _create_jwt(user_id: int, username: str, is_super_admin: bool, guild_ids: list[int]) -> str:
+    secret = get_jwt_secret()
     return jwt.encode(
         {
             "sub":            user_id,
             "username":       username,
             "is_super_admin": is_super_admin,
+            # Access control: user can only operate on these guilds via /internal/*
+            "guild_ids":      guild_ids,
+            "iss":            "veridian-api",
+            "aud":            "veridian-dashboard",
+            "iat":            datetime.utcnow(),
             "exp":            datetime.utcnow() + timedelta(days=7),
         },
         secret,
@@ -150,21 +158,39 @@ def _save_session(discord_user_id: int, discord_username: str,
 def discord_login():
     client_id    = os.getenv("DISCORD_CLIENT_ID")
     redirect_uri = _get_redirect_uri()
-    auth_url = (
-        f"{DISCORD_OAUTH_URL}"
-        f"?client_id={client_id}"
-        f"&redirect_uri={redirect_uri}"
-        f"&response_type=code"
-        f"&scope=identify%20guilds"
-    )
+    if not client_id:
+        raise HTTPException(status_code=500, detail="DISCORD_CLIENT_ID manquant")
+
+    # OAuth CSRF protection: state stored server-side in a cookie
+    state = secrets.token_urlsafe(24)
+    auth_url = f"{DISCORD_OAUTH_URL}?{urlencode({
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': 'identify guilds',
+        'state': state,
+    })}"
     logger.info(f"Login Discord -> {redirect_uri}")
-    return RedirectResponse(url=auth_url)
+    resp = RedirectResponse(url=auth_url)
+    # SameSite=Lax: sent on top-level GET callback; HttpOnly prevents JS read.
+    resp.set_cookie(
+        "vai_oauth_state",
+        state,
+        max_age=600,
+        httponly=True,
+        secure=is_production(),
+        samesite="lax",
+        path="/auth",
+    )
+    return resp
 
 
 @router.get("/callback")
 async def discord_callback(
     code:  str = Query(None),
     error: str = Query(None),
+    state: str = Query(None),
+    vai_oauth_state: str | None = Cookie(default=None),
 ):
     """
     Callback OAuth2 Discord.
@@ -174,8 +200,17 @@ async def discord_callback(
     """
     dashboard_url = _get_dashboard_url()
 
+    # Validate OAuth 'state' to prevent login CSRF.
+    if not state or not vai_oauth_state or state != vai_oauth_state:
+        # Always redirect to dashboard with a generic error (avoid reflecting raw values).
+        resp = RedirectResponse(url=f"{dashboard_url}?error=invalid_state", status_code=302)
+        resp.delete_cookie("vai_oauth_state", path="/auth")
+        return resp
+
     if error:
-        return RedirectResponse(url=f"{dashboard_url}?error={error}", status_code=302)
+        resp = RedirectResponse(url=f"{dashboard_url}?error=oauth_error", status_code=302)
+        resp.delete_cookie("vai_oauth_state", path="/auth")
+        return resp
     if not code:
         raise HTTPException(status_code=400, detail="Code manquant")
 
@@ -187,7 +222,8 @@ async def discord_callback(
     bot_owner_id    = int(os.getenv("BOT_OWNER_DISCORD_ID", 0))
     is_super_admin  = user_id == bot_owner_id
     filtered_guilds = _build_filtered_guilds(data["guilds"])
-    jwt_token       = _create_jwt(user_id, username, is_super_admin)
+    guild_ids       = [int(g["id"]) for g in filtered_guilds if g.get("id")]
+    jwt_token       = _create_jwt(user_id, username, is_super_admin, guild_ids)
 
     _save_session(user_id, username, data["access_token"], jwt_token)
 
@@ -218,10 +254,13 @@ async def discord_callback(
 
     logger.info(f"OAuth OK: {username} ({user_id}) super_admin={is_super_admin}")
 
-    return RedirectResponse(
+    resp = RedirectResponse(
         url=f"{dashboard_url}?auth={temp_code}",
         status_code=302,
     )
+    # Clear state cookie after successful callback.
+    resp.delete_cookie("vai_oauth_state", path="/auth")
+    return resp
 
 
 @router.post("/exchange")
@@ -246,7 +285,9 @@ async def exchange_temp_code(request: Request):
 
     logger.info(f"Temp code echange: {data['user'].get('username')}")
 
-    return JSONResponse(content={
+    return JSONResponse(
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        content={
         "token":  data["jwt"],
         "user":   data["user"],
         "guilds": data["guilds"],
@@ -261,17 +302,62 @@ async def get_current_user(request: Request):
         raise HTTPException(status_code=401, detail="Header Authorization manquant")
     token = auth_header[7:]
     try:
-        secret  = os.getenv("JWT_SECRET", "change_me_in_production")
-        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        # Enforce server-side revocation/expiry via DB session.
+        if not DashboardSessionModel.get_by_token(token):
+            raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
+
+        secret  = get_jwt_secret()
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            audience="veridian-dashboard",
+            issuer="veridian-api",
+        )
         return {
             "user_id":        payload.get("sub"),
             "username":       payload.get("username"),
             "is_super_admin": payload.get("is_super_admin", False),
+            "guild_ids":      payload.get("guild_ids", []),
         }
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expire")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token invalide")
+
+
+@router.get("/user/guilds")
+async def get_current_user_guilds(request: Request):
+    """
+    Returns the filtered guild list for the current user (from Discord),
+    using the access_token stored in the dashboard session DB row.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Header Authorization manquant")
+    token = auth_header[7:]
+
+    session_row = DashboardSessionModel.get_by_token(token)
+    if not session_row:
+        raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
+
+    access_token = session_row.get("access_token")
+    if not access_token:
+        return JSONResponse(
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+            content={"guilds": []},
+        )
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with aiohttp.ClientSession() as session:
+        guilds_resp = await session.get(f"{DISCORD_API_BASE}/users/@me/guilds", headers=headers)
+        guilds = await guilds_resp.json() if guilds_resp.status == 200 else []
+
+    filtered = _build_filtered_guilds(guilds)
+    return JSONResponse(
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        content={"guilds": filtered},
+    )
 
 
 @router.post("/logout")
