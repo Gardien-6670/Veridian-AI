@@ -394,14 +394,39 @@ def close_ticket_dashboard(ticket_id: int, request: Request):
 
 @router.get("/guild/{guild_id}/stats", dependencies=[Depends(verify_guild_access)])
 def get_guild_stats(guild_id: int):
-    open_tickets    = TicketModel.count_by_guild(guild_id, status="open")
-    inprog_tickets  = TicketModel.count_by_guild(guild_id, status="in_progress")
-    total_tickets   = TicketModel.count_by_guild(guild_id)
-    tickets_month   = TicketModel.count_this_month(guild_id)
-    languages       = TicketModel.get_language_stats(guild_id)
-    daily_counts    = TicketModel.get_daily_counts(guild_id, days=7)
-    subscription    = SubscriptionModel.get(guild_id)
-    kb_count        = KnowledgeBaseModel.count(guild_id)
+    # Best-effort stats: avoid returning 500 on schema drift.
+    try:
+        open_tickets = TicketModel.count_by_guild(guild_id, status="open")
+    except Exception:
+        open_tickets = 0
+    try:
+        inprog_tickets = TicketModel.count_by_guild(guild_id, status="in_progress")
+    except Exception:
+        inprog_tickets = 0
+    try:
+        total_tickets = TicketModel.count_by_guild(guild_id)
+    except Exception:
+        total_tickets = 0
+    try:
+        tickets_month = TicketModel.count_this_month(guild_id)
+    except Exception:
+        tickets_month = 0
+    try:
+        languages = TicketModel.get_language_stats(guild_id)
+    except Exception:
+        languages = []
+    try:
+        daily_counts = TicketModel.get_daily_counts(guild_id, days=7)
+    except Exception:
+        daily_counts = []
+    try:
+        subscription = SubscriptionModel.get(guild_id)
+    except Exception:
+        subscription = None
+    try:
+        kb_count = KnowledgeBaseModel.count(guild_id)
+    except Exception:
+        kb_count = 0
 
     return {
         "guild_id":           guild_id,

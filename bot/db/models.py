@@ -598,12 +598,25 @@ class KnowledgeBaseModel:
         with get_db_context() as conn:
             cursor = conn.cursor()
             try:
-                query = f"""
-                    INSERT INTO {DB_TABLE_PREFIX}knowledge_base
-                    (guild_id, question, answer, category, created_by, is_active)
-                    VALUES (%s, %s, %s, %s, %s, 1)
-                """
-                cursor.execute(query, (guild_id, question, answer, category, created_by))
+                try:
+                    query = f"""
+                        INSERT INTO {DB_TABLE_PREFIX}knowledge_base
+                        (guild_id, question, answer, category, created_by, is_active)
+                        VALUES (%s, %s, %s, %s, %s, 1)
+                    """
+                    cursor.execute(query, (guild_id, question, answer, category, created_by))
+                except Exception as e:
+                    # Backward compatible with schemas without `is_active`.
+                    msg = str(e).lower()
+                    if "unknown column" in msg and "is_active" in msg:
+                        query = f"""
+                            INSERT INTO {DB_TABLE_PREFIX}knowledge_base
+                            (guild_id, question, answer, category, created_by)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """
+                        cursor.execute(query, (guild_id, question, answer, category, created_by))
+                    else:
+                        raise
                 kb_id = cursor.lastrowid
                 logger.info(f"Entree KB {kb_id} creee pour guild {guild_id}")
                 return kb_id
@@ -616,11 +629,22 @@ class KnowledgeBaseModel:
         with get_db_context() as conn:
             cursor = conn.cursor(dictionary=True)
             if active_only:
-                cursor.execute(
-                    f"SELECT * FROM {DB_TABLE_PREFIX}knowledge_base "
-                    f"WHERE guild_id = %s AND is_active = 1 ORDER BY priority DESC, created_at ASC",
-                    (guild_id,)
-                )
+                try:
+                    cursor.execute(
+                        f"SELECT * FROM {DB_TABLE_PREFIX}knowledge_base "
+                        f"WHERE guild_id = %s AND is_active = 1 ORDER BY priority DESC, created_at ASC",
+                        (guild_id,)
+                    )
+                except Exception as e:
+                    msg = str(e).lower()
+                    if "unknown column" in msg and "is_active" in msg:
+                        cursor.execute(
+                            f"SELECT * FROM {DB_TABLE_PREFIX}knowledge_base "
+                            f"WHERE guild_id = %s ORDER BY priority DESC, created_at ASC",
+                            (guild_id,)
+                        )
+                    else:
+                        raise
             else:
                 cursor.execute(
                     f"SELECT * FROM {DB_TABLE_PREFIX}knowledge_base "
@@ -660,7 +684,11 @@ class KnowledgeBaseModel:
     @staticmethod
     def delete(kb_id: int) -> bool:
         """Suppression logique (is_active = 0)."""
-        return KnowledgeBaseModel.update(kb_id, is_active=0)
+        try:
+            return KnowledgeBaseModel.update(kb_id, is_active=0)
+        except Exception:
+            # Backward compatible: table may not have is_active -> hard delete
+            return KnowledgeBaseModel.hard_delete(kb_id)
 
     @staticmethod
     def hard_delete(kb_id: int) -> bool:
@@ -680,11 +708,21 @@ class KnowledgeBaseModel:
     def count(guild_id: int) -> int:
         with get_db_context() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}knowledge_base "
-                f"WHERE guild_id = %s AND is_active = 1",
-                (guild_id,)
-            )
+            try:
+                cursor.execute(
+                    f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}knowledge_base "
+                    f"WHERE guild_id = %s AND is_active = 1",
+                    (guild_id,)
+                )
+            except Exception as e:
+                msg = str(e).lower()
+                if "unknown column" in msg and "is_active" in msg:
+                    cursor.execute(
+                        f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}knowledge_base WHERE guild_id = %s",
+                        (guild_id,)
+                    )
+                else:
+                    raise
             return cursor.fetchone()[0]
 
 

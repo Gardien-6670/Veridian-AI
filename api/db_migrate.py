@@ -265,6 +265,26 @@ def _ensure_ticket_migrations() -> None:
                         logger.warning(f"[db] ALTER {msgs_table}.attachments_json: {e}")
 
 
+def _ensure_knowledge_base_migrations() -> None:
+    """Ajoute les colonnes KB manquantes (schema drift)."""
+    table = f"{DB_TABLE_PREFIX}knowledge_base"
+    if not _table_exists(table):
+        return
+
+    if _column_info(table, "is_active") is None:
+        with get_db_context() as conn:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    f"ALTER TABLE {table} "
+                    f"ADD COLUMN is_active TINYINT(1) DEFAULT 1"
+                )
+                logger.info(f"[db] Colonne is_active ajoutee a {table}")
+            except Exception as e:
+                if "duplicate column" not in str(e).lower():
+                    logger.warning(f"[db] ALTER {table}.is_active: {e}")
+
+
 def ensure_database_schema() -> None:
     """
     Creates/migrates the MySQL schema at API startup using the `database/` folder.
@@ -290,5 +310,6 @@ def ensure_database_schema() -> None:
     _ensure_dashboard_sessions_migrations()
     _ensure_bot_status_migrations()
     _ensure_ticket_migrations()
+    _ensure_knowledge_base_migrations()
 
     logger.info("[db] Migration OK")

@@ -84,7 +84,15 @@ _JWT_SECRET = get_jwt_secret()
 
 @app.middleware("http")
 async def _security_headers_middleware(request: Request, call_next):
-    resp = await call_next(request)
+    try:
+        resp = await call_next(request)
+    except HTTPException:
+        # Let FastAPI handle HTTPException so proper status codes/details are returned.
+        raise
+    except Exception as e:
+        # Avoid exceptions bubbling outside of CORS middleware (would drop ACAO headers).
+        logger.exception(f"Unhandled exception: {e}")
+        resp = JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
     for k, v in security_headers().items():
         # Don't override explicit headers set by routes.
         resp.headers.setdefault(k, v)
