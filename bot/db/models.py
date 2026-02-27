@@ -1034,6 +1034,55 @@ class BotStatusModel:
                 )
                 return True
             except Exception as e:
+                msg = str(e).lower()
+                if "unknown column" in msg:
+                    # Backward compatible with older schemas missing newer columns.
+                    try:
+                        # Ensure row exists.
+                        try:
+                            cursor.execute(
+                                f"INSERT IGNORE INTO {DB_TABLE_PREFIX}bot_status (id) VALUES (1)"
+                            )
+                        except Exception:
+                            pass
+
+                        cursor.execute(f"SHOW COLUMNS FROM {DB_TABLE_PREFIX}bot_status")
+                        cols = {str(row[0]) for row in cursor.fetchall() if row and row[0]}
+
+                        values_map = {
+                            "guild_count": guild_count,
+                            "user_count": user_count,
+                            "uptime_sec": uptime_sec,
+                            "version": version,
+                            "latency_ms": latency_ms,
+                            "shard_count": shard_count,
+                            "channel_count": channel_count,
+                            "started_at": started_at,
+                        }
+
+                        set_parts = []
+                        params = []
+                        for col, val in values_map.items():
+                            if col in cols:
+                                set_parts.append(f"{col}=%s")
+                                params.append(val)
+
+                        if not set_parts:
+                            logger.error("Erreur update bot status: aucune colonne compatible trouvée")
+                            return False
+
+                        cursor.execute(
+                            f"UPDATE {DB_TABLE_PREFIX}bot_status SET {', '.join(set_parts)} WHERE id=1",
+                            tuple(params),
+                        )
+                        logger.warning(
+                            "Bot status: schema ancien detecte (colonnes manquantes), update en mode compat."
+                        )
+                        return True
+                    except Exception as e2:
+                        logger.error(f"Erreur update bot status (fallback): {e2}")
+                        return False
+
                 logger.error(f"Erreur update bot status: {e}")
                 return False
 

@@ -279,6 +279,14 @@ async def main():
     if not initialize_database():
         logger.error("✗ Impossible d'initialiser la base de données")
         return
+
+    # Appliquer les migrations (schema drift) pour éviter des erreurs runtime
+    # ex: vai_bot_status.latency_ms manquant sur une ancienne DB.
+    try:
+        from api.db_migrate import ensure_database_schema
+        ensure_database_schema()
+    except Exception as e:
+        logger.warning(f"⚠ Migrations DB non appliquees (best-effort): {e}")
     
     # Charger les cogs
     await load_cogs()
