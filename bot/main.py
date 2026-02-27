@@ -46,21 +46,14 @@ _bot_start_time: datetime | None = None
 
 # Fonction d'initialisation DB
 def initialize_database():
-    """Initialise la base de données si elle n'existe pas."""
+    """Initialise la base de données (DB_NAME) et applique le schema/migrations."""
     try:
         import mysql.connector
         from mysql.connector import Error
-        
-        # Lecture du script schema.sql
-        schema_path = Path('database/schema.sql')
-        if not schema_path.exists():
-            logger.error(f"✗ Fichier schema.sql non trouvé: {schema_path}")
-            return False
-        
-        with open(schema_path, 'r', encoding='utf-8') as f:
-            schema_sql = f.read()
-        
-        # Connexion sans sélection de DB pour créer la DB
+
+        db_name = os.getenv("DB_NAME") or "veridian"
+
+        # Connexion sans sélection de DB pour créer la DB DB_NAME (si besoin)
         try:
             conn = mysql.connector.connect(
                 host=os.getenv('DB_HOST', 'localhost'),
@@ -72,32 +65,25 @@ def initialize_database():
                 charset='utf8mb4',
                 autocommit=True
             )
-            
-            # Split statements by ';' and filter empty/comments
-            statements = []
-            current = ''
-            for line in schema_sql.split('\n'):
-                line = line.rstrip()
-                if line.startswith('--') or not line.strip():
-                    continue
-                current += ' ' + line
-                if line.rstrip().endswith(';'):
-                    stmt = current.strip()
-                    if stmt:
-                        statements.append(stmt)
-                    current = ''
-            
+
             cursor = conn.cursor()
-            for statement in statements:
-                try:
-                    cursor.execute(statement)
-                except Error as e:
-                    logger.warning(f"⚠ {e}")
-            
+            cursor.execute(
+                f"CREATE DATABASE IF NOT EXISTS `{db_name}` "
+                "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            )
             cursor.close()
             conn.close()
-            
-            logger.info("✓ Base de données vérifiée/initialisée")
+
+            # Appliquer le schema/migrations sur la DB cible (best-effort).
+            try:
+                from api.db_migrate import ensure_database_schema
+                ensure_database_schema()
+            except Exception as e:
+                # Most common cause: MySQL user missing ALTER/CREATE privileges.
+                logger.error(f"[db] Migration a echoue: {e}")
+                return False
+
+            logger.info("✓ Base de données vérifiée/initialisée + migrations appliquées")
             return True
         except Error as err:
             logger.error(f"✗ Erreur initialisation DB: {err}")
@@ -279,14 +265,6 @@ async def main():
     if not initialize_database():
         logger.error("✗ Impossible d'initialiser la base de données")
         return
-
-    # Appliquer les migrations (schema drift) pour éviter des erreurs runtime
-    # ex: vai_bot_status.latency_ms manquant sur une ancienne DB.
-    try:
-        from api.db_migrate import ensure_database_schema
-        ensure_database_schema()
-    except Exception as e:
-        logger.warning(f"⚠ Migrations DB non appliquees (best-effort): {e}")
     
     # Charger les cogs
     await load_cogs()

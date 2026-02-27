@@ -144,13 +144,26 @@ class TicketModel:
         with get_db_context() as conn:
             cursor = conn.cursor()
             try:
-                query = f"""
-                    INSERT INTO {DB_TABLE_PREFIX}tickets
-                    (guild_id, user_id, user_username, channel_id, user_language, staff_language, status)
-                    VALUES (%s, %s, %s, %s, %s, %s, 'open')
-                """
-                cursor.execute(query, (guild_id, user_id, user_username,
-                                       channel_id, user_language, staff_language))
+                try:
+                    query = f"""
+                        INSERT INTO {DB_TABLE_PREFIX}tickets
+                        (guild_id, user_id, user_username, channel_id, user_language, staff_language, status)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'open')
+                    """
+                    cursor.execute(query, (guild_id, user_id, user_username,
+                                           channel_id, user_language, staff_language))
+                except Exception as e:
+                    # Backward compatible with older schemas missing `user_username`.
+                    msg = str(e).lower()
+                    if "unknown column" in msg and "user_username" in msg:
+                        query = f"""
+                            INSERT INTO {DB_TABLE_PREFIX}tickets
+                            (guild_id, user_id, channel_id, user_language, staff_language, status)
+                            VALUES (%s, %s, %s, %s, %s, 'open')
+                        """
+                        cursor.execute(query, (guild_id, user_id, channel_id, user_language, staff_language))
+                    else:
+                        raise
                 ticket_id = cursor.lastrowid
                 logger.info(f"Ticket {ticket_id} cree pour guild {guild_id}")
                 return ticket_id

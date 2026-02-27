@@ -247,6 +247,48 @@ def _ensure_ticket_migrations() -> None:
     """Ajoute les colonnes necessaires pour update embed + stockage complet messages."""
     tickets_table = f"{DB_TABLE_PREFIX}tickets"
     if _table_exists(tickets_table):
+        # Snapshot username at ticket creation (used by dashboard and bot).
+        if _column_info(tickets_table, "user_username") is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE {tickets_table} "
+                        f"ADD COLUMN user_username VARCHAR(100) NULL "
+                        f"COMMENT 'Snapshot username au moment de louverture'"
+                    )
+                    logger.info(f"[db] Colonne user_username ajoutee a {tickets_table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {tickets_table}.user_username: {e}")
+
+        # Assigned staff name (dashboard display)
+        if _column_info(tickets_table, "assigned_staff_name") is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE {tickets_table} "
+                        f"ADD COLUMN assigned_staff_name VARCHAR(100) NULL"
+                    )
+                    logger.info(f"[db] Colonne assigned_staff_name ajoutee a {tickets_table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {tickets_table}.assigned_staff_name: {e}")
+
+        if _column_info(tickets_table, "assigned_staff_id") is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE {tickets_table} "
+                        f"ADD COLUMN assigned_staff_id BIGINT NULL"
+                    )
+                    logger.info(f"[db] Colonne assigned_staff_id ajoutee a {tickets_table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {tickets_table}.assigned_staff_id: {e}")
+
         if _column_info(tickets_table, "initial_message_id") is None:
             with get_db_context() as conn:
                 cursor = conn.cursor()
@@ -263,6 +305,19 @@ def _ensure_ticket_migrations() -> None:
 
     msgs_table = f"{DB_TABLE_PREFIX}ticket_messages"
     if _table_exists(msgs_table):
+        if _column_info(msgs_table, "author_username") is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE {msgs_table} "
+                        f"ADD COLUMN author_username VARCHAR(100) NULL"
+                    )
+                    logger.info(f"[db] Colonne author_username ajoutee a {msgs_table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {msgs_table}.author_username: {e}")
+
         if _column_info(msgs_table, "discord_message_id") is None:
             with get_db_context() as conn:
                 cursor = conn.cursor()
