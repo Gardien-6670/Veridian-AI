@@ -786,28 +786,7 @@
   </div><!-- .main -->
 </div><!-- .app -->
 
-<script>
-// Fonctions super admin inline (simples, pas besoin de module séparé)
-async function adminActivateSub() {
-  const guildId = document.getElementById("admin-guild-id")?.value?.trim();
-  const plan = document.getElementById("admin-plan")?.value;
-  if (!guildId) return showToast("Entrez un Guild ID", "warn");
-  try {
-    await apiPost("/internal/admin/activate-sub", { guild_id: guildId, plan });
-    showToast(`Abonnement ${plan} activé pour ${guildId}`, "success");
-  } catch (e) { showToast("Erreur: " + e.message, "error"); }
-}
-
-async function adminRevokeSub() {
-  const guildId = document.getElementById("admin-guild-id")?.value?.trim();
-  if (!guildId) return showToast("Entrez un Guild ID", "warn");
-  if (!confirm(`Révoquer l'abonnement de ${guildId} ?`)) return;
-  try {
-    await apiPost("/internal/revoke-sub", { guild_id: parseInt(guildId) });
-    showToast(`Abonnement révoqué pour ${guildId}`, "success");
-  } catch (e) { showToast("Erreur: " + e.message, "error"); }
-}
-</script>
+  <!-- Inline scripts removed: blocked by strict CSP (script-src 'self'). -->
 
 </body>
 </html>

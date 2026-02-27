@@ -40,7 +40,16 @@ def _decode_jwt(token: str) -> dict:
         )
     except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expire")
-    except pyjwt.InvalidTokenError:
+    except pyjwt.InvalidTokenError as e:
+        # Log debug info server-side (do NOT log the token itself).
+        try:
+            parts = token.split(".")
+            logger.warning(
+                f"JWT invalide: {type(e).__name__}: {str(e)[:120]} "
+                f"(len={len(token)}, parts={len(parts)})"
+            )
+        except Exception:
+            pass
         raise HTTPException(status_code=401, detail="Token invalide")
 
 
@@ -100,8 +109,22 @@ def verify_internal_auth(request: Request, x_api_secret: str = Header(None)) -> 
             # Revocation won't be enforced in that case.
 
         payload = _decode_jwt(token)
-        user_id = payload.get("sub", 0)
-        guild_ids = payload.get("guild_ids", [])
+        try:
+            user_id = int(payload.get("sub", 0) or 0)
+        except Exception:
+            user_id = 0
+
+        # Prefer server-side guild allowlist stored in the dashboard session row.
+        guild_ids = None
+        try:
+            from bot.db.models import DashboardSessionModel
+            guild_ids = DashboardSessionModel.allowed_guild_ids(token)
+        except Exception:
+            guild_ids = None
+
+        if guild_ids is None:
+            guild_ids = payload.get("guild_ids", [])
+
         request.state.user_id = user_id
         request.state.is_super_admin = bool(payload.get("is_super_admin", False))
         request.state.guild_ids = guild_ids

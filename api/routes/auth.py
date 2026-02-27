@@ -29,6 +29,24 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 DISCORD_API_BASE  = "https://discord.com/api/v10"
 DISCORD_OAUTH_URL = "https://discord.com/api/v10/oauth2/authorize"
 
+def _get_bearer_token_from_request(request: Request) -> str | None:
+    """
+    Extract a bearer token from either:
+      - Authorization: Bearer <token>
+      - X-VAI-Authorization: Bearer <token>   (fallback for proxies that strip Authorization)
+      - X-VAI-Authorization: <token>
+    """
+    auth_header = request.headers.get("Authorization", "") or ""
+    alt_header = request.headers.get("X-VAI-Authorization", "") or ""
+
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:]
+    if alt_header.startswith("Bearer "):
+        return alt_header[7:]
+    if alt_header:
+        return alt_header.strip()
+    return None
+
 
 # ─────────────────────────────────────────────────────────────
 # Helpers
@@ -126,11 +144,14 @@ def _create_jwt(user_id: int, username: str, is_super_admin: bool, guild_ids: li
     secret = get_jwt_secret()
     return jwt.encode(
         {
-            "sub":            user_id,
+            # RFC 7519: "sub" should be a string.
+            "sub":            str(user_id),
             "username":       username,
             "is_super_admin": is_super_admin,
-            # Access control: user can only operate on these guilds via /internal/*
-            "guild_ids":      guild_ids,
+            # IMPORTANT: do NOT embed large guild lists into the JWT.
+            # Some infrastructures (proxies/CDNs) may truncate large Authorization headers,
+            # making the token impossible to verify ("Token invalide").
+            # Access control is enforced server-side via DB session (guild_ids_json).
             "iss":            "veridian-api",
             "aud":            "veridian-dashboard",
             "iat":            datetime.utcnow(),
@@ -142,13 +163,15 @@ def _create_jwt(user_id: int, username: str, is_super_admin: bool, guild_ids: li
 
 
 def _save_session(discord_user_id: int, discord_username: str,
-                  access_token: str, jwt_token: str):
+                  access_token: str, jwt_token: str, guild_ids: list[int]):
     try:
+        import json
         DashboardSessionModel.create(
             discord_user_id=discord_user_id,
             discord_username=discord_username,
             access_token=access_token,
             jwt_token=jwt_token,
+            guild_ids_json=json.dumps(guild_ids),
             expires_at=datetime.utcnow() + timedelta(days=7),
         )
     except Exception as e:
@@ -233,7 +256,7 @@ async def discord_callback(
     guild_ids       = [int(g["id"]) for g in filtered_guilds if g.get("id")]
     jwt_token       = _create_jwt(user_id, username, is_super_admin, guild_ids)
 
-    _save_session(user_id, username, data["access_token"], jwt_token)
+    _save_session(user_id, username, data["access_token"], jwt_token, guild_ids)
 
     # Stocker le compte dashboard (+ email) pour stats & upgrades futures.
     try:
@@ -316,11 +339,14 @@ async def exchange_temp_code(request: Request):
 
         if status == "missing":
             u = data.get("user") or {}
+            guild_ids = [int(g.get("id")) for g in (data.get("guilds") or []) if g.get("id")]
+            import json
             DashboardSessionModel.create(
                 discord_user_id=int(u.get("id") or 0),
                 discord_username=str(u.get("username") or "Unknown"),
                 access_token="",
                 jwt_token=data["jwt"],
+                guild_ids_json=json.dumps(guild_ids),
                 expires_at=datetime.utcnow() + timedelta(days=7),
             )
     except Exception as e:
@@ -338,10 +364,9 @@ async def exchange_temp_code(request: Request):
 @router.get("/user/me")
 async def get_current_user(request: Request):
     """Valide le JWT Bearer et retourne les infos utilisateur."""
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
+    token = _get_bearer_token_from_request(request)
+    if not token:
         raise HTTPException(status_code=401, detail="Header Authorization manquant")
-    token = auth_header[7:]
     try:
         # Enforce server-side revocation/expiry via DB session.
         try:
@@ -367,11 +392,19 @@ async def get_current_user(request: Request):
             audience="veridian-dashboard",
             issuer="veridian-api",
         )
+        # Guild allowlist is stored server-side in DB (dashboard session).
+        guild_ids = payload.get("guild_ids", [])
+        try:
+            allowed = DashboardSessionModel.allowed_guild_ids(token)
+            if allowed is not None:
+                guild_ids = allowed
+        except Exception:
+            pass
         return {
             "user_id":        payload.get("sub"),
             "username":       payload.get("username"),
             "is_super_admin": payload.get("is_super_admin", False),
-            "guild_ids":      payload.get("guild_ids", []),
+            "guild_ids":      guild_ids,
         }
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expire")
@@ -385,10 +418,9 @@ async def get_current_user_guilds(request: Request):
     Returns the filtered guild list for the current user (from Discord),
     using the access_token stored in the dashboard session DB row.
     """
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
+    token = _get_bearer_token_from_request(request)
+    if not token:
         raise HTTPException(status_code=401, detail="Header Authorization manquant")
-    token = auth_header[7:]
 
     try:
         status = DashboardSessionModel.token_status(token)
@@ -434,13 +466,10 @@ async def get_current_user_guilds(request: Request):
 @router.post("/logout")
 async def logout(request: Request):
     """Invalide la session en DB."""
-    token = None
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
+    token = _get_bearer_token_from_request(request)
     if not token:
         try:
-            body  = await request.json()
+            body = await request.json()
             token = body.get("token")
         except Exception:
             pass

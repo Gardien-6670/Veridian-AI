@@ -231,6 +231,7 @@ CREATE TABLE IF NOT EXISTS vai_dashboard_sessions (
     discord_username    VARCHAR(100),
     access_token        VARCHAR(500)                COMMENT 'Token OAuth2 Discord',
     jwt_token           TEXT                        COMMENT 'JWT session dashboard',
+    guild_ids_json      JSON                        COMMENT 'Liste des guild_ids autorises (owner/admin) au login',
     is_revoked          TINYINT(1)      DEFAULT 0,
     expires_at          TIMESTAMP,
     created_at          TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,

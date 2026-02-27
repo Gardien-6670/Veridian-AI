@@ -165,6 +165,16 @@ def _ensure_dashboard_sessions_migrations() -> None:
                 f"ALTER TABLE {table} ADD COLUMN is_revoked TINYINT(1) DEFAULT 0"
             )
 
+    # Add guild_ids_json if missing.
+    if _column_info(table, "guild_ids_json") is None:
+        with get_db_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"ALTER TABLE {table} "
+                f"ADD COLUMN guild_ids_json JSON NULL "
+                f"COMMENT 'Liste des guild_ids autorises (owner/admin) au login'"
+            )
+
     # Ensure jwt_token is TEXT (older init.sql used VARCHAR(500)).
     info = _column_info(table, "jwt_token")
     if info and (info.get("data_type") or "").lower() in {"varchar", "char"}:

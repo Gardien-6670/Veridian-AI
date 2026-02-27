@@ -778,17 +778,31 @@ class DashboardSessionModel:
 
     @staticmethod
     def create(discord_user_id: int, discord_username: str, access_token: str,
-               jwt_token: str, expires_at) -> Optional[int]:
+               jwt_token: str, expires_at, guild_ids_json: str | None = None) -> Optional[int]:
         with get_db_context() as conn:
             cursor = conn.cursor()
             try:
-                query = f"""
-                    INSERT INTO {DB_TABLE_PREFIX}dashboard_sessions
-                    (discord_user_id, discord_username, access_token, jwt_token, expires_at)
-                    VALUES (%s, %s, %s, %s, %s)
-                """
-                cursor.execute(query, (discord_user_id, discord_username,
-                                       access_token, jwt_token, expires_at))
+                try:
+                    query = f"""
+                        INSERT INTO {DB_TABLE_PREFIX}dashboard_sessions
+                        (discord_user_id, discord_username, access_token, jwt_token, guild_ids_json, expires_at)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """
+                    cursor.execute(query, (discord_user_id, discord_username,
+                                           access_token, jwt_token, guild_ids_json, expires_at))
+                except Exception as e:
+                    # Backward compatible with older schemas without `guild_ids_json`.
+                    msg = str(e).lower()
+                    if "unknown column" in msg and "guild_ids_json" in msg:
+                        query = f"""
+                            INSERT INTO {DB_TABLE_PREFIX}dashboard_sessions
+                            (discord_user_id, discord_username, access_token, jwt_token, expires_at)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """
+                        cursor.execute(query, (discord_user_id, discord_username,
+                                               access_token, jwt_token, expires_at))
+                    else:
+                        raise
                 logger.debug(f"Session dashboard creee pour {discord_username}")
                 return cursor.lastrowid
             except Exception as e:
@@ -857,6 +871,32 @@ class DashboardSessionModel:
                     )
                     return cursor.fetchone()
                 raise
+
+    @staticmethod
+    def allowed_guild_ids(jwt_token: str) -> list[int] | None:
+        """
+        Returns the allowed guild IDs for this session (from DB), or None if unavailable.
+        """
+        import json
+        row = DashboardSessionModel.get_by_token(jwt_token)
+        if not row:
+            return None
+        raw = row.get("guild_ids_json")
+        if raw is None:
+            return None
+        try:
+            data = raw
+            if isinstance(raw, (str, bytes, bytearray)):
+                data = json.loads(raw)
+            out: list[int] = []
+            for x in (data or []):
+                try:
+                    out.append(int(x))
+                except Exception:
+                    pass
+            return out
+        except Exception:
+            return None
 
     @staticmethod
     def revoke_token(jwt_token: str) -> bool:
