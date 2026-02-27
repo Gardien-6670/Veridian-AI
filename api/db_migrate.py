@@ -97,14 +97,24 @@ def _apply_schema_file(sql_path: Path) -> None:
     sql_text = sql_path.read_text(encoding="utf-8", errors="replace")
     statements = _split_sql_statements(sql_text)
 
+    non_views: list[str] = []
+    views: list[str] = []
+
+    for stmt in statements:
+        head = stmt.lstrip().split(None, 4)[:4]
+        head_str = " ".join(head).lower()
+        if head_str.startswith("create database") or head_str.startswith("use "):
+            continue
+        if head_str.startswith("create or replace view") or head_str.startswith("create view"):
+            views.append(stmt)
+        else:
+            non_views.append(stmt)
+
     with get_db_context() as conn:
         cursor = conn.cursor()
-        for stmt in statements:
-            head = stmt.lstrip().split(None, 2)[:2]
-            head_str = " ".join(head).lower()
-            if head_str.startswith("create database") or head_str.startswith("use "):
-                continue
 
+        # Pass 1: tables/indexes/inserts (avoid failing early on views that depend on new columns).
+        for stmt in non_views:
             try:
                 cursor.execute(stmt)
             except Exception as e:
@@ -116,6 +126,23 @@ def _apply_schema_file(sql_path: Path) -> None:
                     or "already exists" in msg
                 )
                 if ignorable:
+                    continue
+                raise
+
+        # Pass 2: views (best-effort; schema drift can break them temporarily).
+        for stmt in views:
+            try:
+                cursor.execute(stmt)
+            except Exception as e:
+                msg = str(e).lower()
+                # Common drift: columns missing at the time of view creation.
+                ignorable = (
+                    "unknown column" in msg
+                    or "doesn't exist" in msg
+                    or "table" in msg and "doesn't exist" in msg
+                )
+                if ignorable:
+                    logger.warning(f"[db] View skipped (schema drift): {str(e)[:180]}")
                     continue
                 raise
 
@@ -304,6 +331,9 @@ def ensure_database_schema() -> None:
         return
 
     logger.info(f"[db] Migration schema depuis {schema_sql}")
+    # 1) Apply non-view statements first (tables/indexes/inserts).
+    # 2) Apply targeted ALTERs (schema drift fixes).
+    # 3) Re-apply views (so they can reference the new columns).
     _apply_schema_file(schema_sql)
 
     # Targeted ALTERs for already-existing tables.
@@ -311,5 +341,12 @@ def ensure_database_schema() -> None:
     _ensure_bot_status_migrations()
     _ensure_ticket_migrations()
     _ensure_knowledge_base_migrations()
+
+    # Re-apply views after ALTERs (best-effort).
+    try:
+        _apply_schema_file(schema_sql)
+    except Exception as e:
+        # Don't block startup only because of view creation issues in older schemas.
+        logger.warning(f"[db] Second pass schema apply failed (views?): {str(e)[:180]}")
 
     logger.info("[db] Migration OK")
