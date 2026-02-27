@@ -181,6 +181,80 @@ def _ensure_dashboard_sessions_migrations() -> None:
             cursor.execute(f"ALTER TABLE {table} MODIFY COLUMN access_token VARCHAR(500)")
 
 
+def _ensure_bot_status_migrations() -> None:
+    """Ajoute les nouvelles colonnes a vai_bot_status si elles manquent."""
+    table = f"{DB_TABLE_PREFIX}bot_status"
+    if not _table_exists(table):
+        return
+
+    new_columns = {
+        "channel_count": "INT DEFAULT 0 COMMENT 'Nombre total de channels accessibles'",
+        "latency_ms":    "FLOAT DEFAULT 0 COMMENT 'Latence WebSocket Discord en ms'",
+        "shard_count":   "INT DEFAULT 1 COMMENT 'Nombre de shards actifs'",
+        "started_at":    "TIMESTAMP NULL COMMENT 'Heure de demarrage du bot'",
+    }
+
+    for col_name, col_def in new_columns.items():
+        if _column_info(table, col_name) is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
+                    logger.info(f"[db] Colonne {col_name} ajoutee a {table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {table}.{col_name}: {e}")
+
+
+def _ensure_ticket_migrations() -> None:
+    """Ajoute les colonnes necessaires pour update embed + stockage complet messages."""
+    tickets_table = f"{DB_TABLE_PREFIX}tickets"
+    if _table_exists(tickets_table):
+        if _column_info(tickets_table, "initial_message_id") is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE {tickets_table} "
+                        f"ADD COLUMN initial_message_id BIGINT NULL "
+                        f"COMMENT 'Message embed initial du ticket (pour mise a jour langue)'"
+                    )
+                    logger.info(f"[db] Colonne initial_message_id ajoutee a {tickets_table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {tickets_table}.initial_message_id: {e}")
+
+    msgs_table = f"{DB_TABLE_PREFIX}ticket_messages"
+    if _table_exists(msgs_table):
+        if _column_info(msgs_table, "discord_message_id") is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE {msgs_table} "
+                        f"ADD COLUMN discord_message_id BIGINT NULL "
+                        f"COMMENT 'Discord Message ID'"
+                    )
+                    logger.info(f"[db] Colonne discord_message_id ajoutee a {msgs_table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {msgs_table}.discord_message_id: {e}")
+
+        if _column_info(msgs_table, "attachments_json") is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE {msgs_table} "
+                        f"ADD COLUMN attachments_json JSON NULL "
+                        f"COMMENT 'Liste d attachments (urls, filenames, etc.)'"
+                    )
+                    logger.info(f"[db] Colonne attachments_json ajoutee a {msgs_table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {msgs_table}.attachments_json: {e}")
+
+
 def ensure_database_schema() -> None:
     """
     Creates/migrates the MySQL schema at API startup using the `database/` folder.
@@ -204,6 +278,7 @@ def ensure_database_schema() -> None:
 
     # Targeted ALTERs for already-existing tables.
     _ensure_dashboard_sessions_migrations()
+    _ensure_bot_status_migrations()
+    _ensure_ticket_migrations()
 
     logger.info("[db] Migration OK")
-

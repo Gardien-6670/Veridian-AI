@@ -82,7 +82,20 @@ class GroqClient:
         if not self.api_keys:
             return text
         
-        prompt = f"Traduis de {source_language} vers {target_language}. Texte:\n{text}"
+        system = (
+            "You are a translation engine.\n"
+            "Rules:\n"
+            "- Translate strictly from the source language to the target language.\n"
+            "- Output ONLY the translated text (no quotes, no explanations).\n"
+            "- Preserve formatting, line breaks, emojis, mentions and code blocks.\n"
+            "- Do not add or remove information.\n"
+        )
+        prompt = (
+            f"Source language: {source_language}\n"
+            f"Target language: {target_language}\n"
+            "Text:\n"
+            f"{text}"
+        )
         
         for attempt in range(len(self.api_keys)):
             try:
@@ -92,7 +105,10 @@ class GroqClient:
                 
                 completion = client.chat.completions.create(
                     model=GROQ_MODEL_FAST,
-                    messages=[{"role": "user", "content": prompt}],
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": prompt},
+                    ],
                     temperature=0.3,
                     max_tokens=1000,
                     stream=False,

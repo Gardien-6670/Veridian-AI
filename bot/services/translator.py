@@ -4,7 +4,10 @@ Détecte les langues, vérifie le cache, et appelle Groq si nécessaire
 """
 
 import hashlib
-from langdetect import detect, LangDetectException
+import re
+from typing import Optional
+
+from langdetect import detect_langs, LangDetectException, DetectorFactory
 from loguru import logger
 from bot.services.groq_client import GroqClient
 from bot.db.models import TranslationCacheModel
@@ -13,10 +16,37 @@ from bot.db.models import TranslationCacheModel
 class TranslatorService:
     def __init__(self):
         """Initialise le service de traduction."""
+        # Make langdetect deterministic across runs.
+        try:
+            DetectorFactory.seed = 0
+        except Exception:
+            pass
         self.groq_client = GroqClient()
         logger.info("✓ Service Translator initialisé")
 
-    def detect_language(self, text: str) -> str:
+    _RE_URL = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+    _RE_MENTION = re.compile(r"<@!?(\d+)>|<@&(\d+)>|<#(\d+)>")
+    _RE_CUSTOM_EMOJI = re.compile(r"<a?:\w+:(\d+)>")
+    _RE_CODEBLOCK = re.compile(r"```[\s\S]*?```", re.MULTILINE)
+    _RE_INLINE_CODE = re.compile(r"`[^`]{1,200}`")
+    _RE_NON_LETTERS = re.compile(r"[^\w\s'-]", re.UNICODE)
+
+    def _clean_for_detection(self, text: str) -> str:
+        t = (text or "").strip()
+        if not t:
+            return ""
+        # Remove blocks that often confuse detection.
+        t = self._RE_CODEBLOCK.sub(" ", t)
+        t = self._RE_INLINE_CODE.sub(" ", t)
+        t = self._RE_URL.sub(" ", t)
+        t = self._RE_MENTION.sub(" ", t)
+        t = self._RE_CUSTOM_EMOJI.sub(" ", t)
+        t = self._RE_NON_LETTERS.sub(" ", t)
+        # Collapse whitespace
+        t = " ".join(t.split())
+        return t
+
+    def detect_language(self, text: str) -> Optional[str]:
         """
         Détecte la langue d'un texte.
         
@@ -27,12 +57,29 @@ class TranslatorService:
             Code langue (ex: 'en', 'fr', 'es')
         """
         try:
-            language = detect(text)
-            logger.debug(f"✓ Langue détectée: {language}")
+            cleaned = self._clean_for_detection(text)
+            # Too short/low-signal inputs make langdetect very unreliable.
+            if len(cleaned) < 12 or len(cleaned.split()) < 3:
+                return None
+
+            langs = detect_langs(cleaned)
+            if not langs:
+                return None
+
+            top = langs[0]
+            # Heuristic confidence gate: for short messages, require high confidence.
+            if getattr(top, "prob", 0.0) < 0.70 and len(cleaned) < 80:
+                return None
+
+            language = getattr(top, "lang", None)
+            if not language or len(language) != 2:
+                return None
+
+            logger.debug(f"✓ Langue détectée: {language} (p={getattr(top,'prob',0.0):.2f})")
             return language
         except LangDetectException as e:
-            logger.warning(f"Impossible de détecter la langue: {e}, défaut: en")
-            return 'en'  # Défaut
+            logger.warning(f"Impossible de détecter la langue: {e}")
+            return None
 
     def generate_content_hash(self, text: str, source_lang: str, target_lang: str) -> str:
         """

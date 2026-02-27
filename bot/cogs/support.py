@@ -6,7 +6,7 @@ Les commandes de configuration sont gerees via le dashboard.
 import discord
 from discord.ext import commands
 from loguru import logger
-from bot.db.models import GuildModel, SubscriptionModel, UserModel
+from bot.db.models import GuildModel, SubscriptionModel
 from bot.services.groq_client import GroqClient
 from bot.services.translator import TranslatorService
 from bot.config import MIN_MESSAGE_LENGTH, PLAN_LIMITS, DASHBOARD_URL
@@ -38,7 +38,7 @@ class SupportCog(commands.Cog):
 
         async with message.channel.typing():
             try:
-                language = self.translator.detect_language(message.content)
+                language = self.translator.detect_language(message.content) or "en"
                 response = self.groq_client.generate_support_response(
                     message.content,
                     guild_name=message.guild.name,
@@ -57,26 +57,6 @@ class SupportCog(commands.Cog):
                     )
                 except Exception:
                     pass
-
-    # ------------------------------------------------------------------
-    # /language
-    # ------------------------------------------------------------------
-
-    @discord.app_commands.command(name="language", description="Definir votre langue preferee")
-    @discord.app_commands.describe(language="Code langue ISO-639-1 (ex: en, fr, es)")
-    async def set_language(self, interaction: discord.Interaction, language: str):
-        await interaction.response.defer(ephemeral=True)
-        if len(language) != 2 or not language.isalpha():
-            await interaction.followup.send(
-                "Format invalide. Exemple : 'en', 'fr', 'de'", ephemeral=True
-            )
-            return
-        lang = language.lower()
-        UserModel.upsert(interaction.user.id, interaction.user.name, lang)
-        await interaction.followup.send(
-            f"Langue preferee definie sur : **{lang.upper()}**", ephemeral=True
-        )
-        logger.info(f"Langue {interaction.user.id} -> {lang}")
 
     # ------------------------------------------------------------------
     # /premium

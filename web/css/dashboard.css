@@ -381,6 +381,12 @@ body::before {
 }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
 
+/* Bot status indicator states (dynamically set by JS) */
+.status-indicator.offline { color: var(--red); background: var(--red-dim); border-color: rgba(255,77,109,0.12); }
+.status-indicator.offline .status-dot { background: var(--red); box-shadow: 0 0 5px var(--red); animation: none; }
+.status-indicator.unknown { color: var(--yellow); background: var(--yellow-dim); border-color: rgba(255,201,77,0.12); }
+.status-indicator.unknown .status-dot { background: var(--yellow); box-shadow: 0 0 5px var(--yellow); animation: none; }
+
 /* Page content */
 .page-content {
   flex: 1;

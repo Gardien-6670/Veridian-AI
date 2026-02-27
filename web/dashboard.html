@@ -183,9 +183,9 @@
       </div>
       <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-left:12px" id="topbar-sub">Vue d'ensemble</div>
       <div class="topbar-right">
-        <div class="status-indicator">
-          <div class="status-dot"></div>
-          BOT EN LIGNE
+        <div class="status-indicator" id="bot-status-indicator">
+          <div class="status-dot" id="bot-status-dot"></div>
+          <span id="bot-status-text">VÉRIFICATION…</span>
         </div>
         <a href="index.html" class="topbar-btn">
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
@@ -217,7 +217,31 @@
         </div>
       </div>
 
-      <!-- Stats row -->
+      <!-- Bot Status Row (visible pour tous les utilisateurs authentifiés) -->
+      <div class="stats-row" id="bot-status-row">
+        <div class="stat-card c-green">
+          <div class="stat-top"><div class="stat-label">Statut du bot</div><div class="stat-icon c-green">🤖</div></div>
+          <div class="stat-value" id="dash-bot-status">—</div>
+          <div class="stat-delta" id="dash-bot-latency">Latence: —</div>
+        </div>
+        <div class="stat-card c-blue">
+          <div class="stat-top"><div class="stat-label">Serveurs</div><div class="stat-icon c-blue">🏠</div></div>
+          <div class="stat-value" id="dash-bot-guilds">—</div>
+          <div class="stat-delta" id="dash-bot-users">— utilisateurs</div>
+        </div>
+        <div class="stat-card c-yellow">
+          <div class="stat-top"><div class="stat-label">Uptime</div><div class="stat-icon c-yellow">⏱️</div></div>
+          <div class="stat-value" id="dash-bot-uptime">—</div>
+          <div class="stat-delta" id="dash-bot-started">Depuis: —</div>
+        </div>
+        <div class="stat-card c-red">
+          <div class="stat-top"><div class="stat-label">Version</div><div class="stat-icon c-red">🧩</div></div>
+          <div class="stat-value" id="dash-bot-version">—</div>
+          <div class="stat-delta" id="dash-bot-shards">1 shard</div>
+        </div>
+      </div>
+
+      <!-- Stats row (tickets & orders) -->
       <div class="stats-row">
         <div class="stat-card c-green">
           <div class="stat-top"><div class="stat-label">Tickets actifs</div><div class="stat-icon c-green">🎫</div></div>
@@ -227,7 +251,7 @@
         <div class="stat-card c-blue">
           <div class="stat-top"><div class="stat-label">Tickets ce mois</div><div class="stat-icon c-blue">📊</div></div>
           <div class="stat-value" id="stat-tickets-mois">—</div>
-          <div class="stat-delta up">Total cumulé</div>
+          <div class="stat-delta up">Ce mois</div>
         </div>
         <div class="stat-card c-yellow">
           <div class="stat-top"><div class="stat-label">Commandes en attente</div><div class="stat-icon c-yellow">⏳</div></div>
@@ -236,7 +260,7 @@
         </div>
         <div class="stat-card c-red">
           <div class="stat-top"><div class="stat-label">Langues détectées</div><div class="stat-icon c-red">🌐</div></div>
-          <div class="stat-value">9</div>
+          <div class="stat-value" id="stat-languages-count">0</div>
           <div class="stat-delta">Ce mois — 100+ supportées</div>
         </div>
       </div>
@@ -476,43 +500,43 @@
                 <div class="toggle-name">Traduction automatique</div>
                 <div class="toggle-desc">Traduit les messages entre staff et utilisateurs</div>
               </div>
-              <div class="toggle-switch on"></div>
+              <div class="toggle-switch" id="toggle-auto-translate" data-setting-key="auto_translate"></div>
             </div>
             <div class="toggle-row">
               <div class="toggle-info">
                 <div class="toggle-name">Support public IA</div>
                 <div class="toggle-desc">Réponses automatiques dans le channel désigné</div>
               </div>
-              <div class="toggle-switch on"></div>
+              <div class="toggle-switch" id="toggle-public-support" data-setting-key="public_support"></div>
             </div>
             <div class="toggle-row">
               <div class="toggle-info">
                 <div class="toggle-name">Transcription IA</div>
                 <div class="toggle-desc">Résumé automatique à la fermeture des tickets</div>
               </div>
-              <div class="toggle-switch on"></div>
+              <div class="toggle-switch" id="toggle-auto-transcript" data-setting-key="auto_transcript"></div>
             </div>
             <div class="toggle-row">
               <div class="toggle-info">
                 <div class="toggle-name">Modération IA</div>
                 <div class="toggle-desc">Détection automatique de contenu inapproprié</div>
               </div>
-              <div class="toggle-switch on"></div>
+              <div class="toggle-switch" id="toggle-ai-moderation" data-setting-key="ai_moderation"></div>
             </div>
             <div class="toggle-row">
               <div class="toggle-info">
                 <div class="toggle-name">Suggestions staff IA</div>
                 <div class="toggle-desc">Suggestions de réponses pour les agents<br><span style="font-size:10px;color:var(--accent);font-family:'Space Mono',monospace">PRO UNIQUEMENT</span></div>
               </div>
-              <div class="toggle-switch" style="opacity:0.4;pointer-events:none"></div>
+              <div class="toggle-switch" id="toggle-staff-suggestions" data-setting-key="staff_suggestions" style="opacity:0.4;pointer-events:none"></div>
             </div>
 
             <div style="margin-top:16px;padding:12px;background:var(--blue-dim);border:1px solid rgba(77,166,255,0.15);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:10px">
               <div>
                 <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--blue);margin-bottom:3px">PLAN ACTUEL</div>
-                <div style="font-size:13px;font-weight:700;color:var(--text)">Premium <span style="color:var(--text3);font-weight:400">— 2€/mois</span></div>
+                <div style="font-size:13px;font-weight:700;color:var(--text)"><span id="settings-current-plan">—</span> <span id="settings-current-plan-price" style="color:var(--text3);font-weight:400"></span></div>
               </div>
-              <button class="btn btn-ghost btn-sm" style="font-size:11px" data-nav="orders" type="button">Upgrader →</button>
+              <button class="btn btn-ghost btn-sm" id="settings-upgrade-btn" style="font-size:11px" data-nav="orders" type="button">Upgrader →</button>
             </div>
           </div>
         </div>
@@ -621,32 +645,26 @@
       </div>
 
       <!-- Bot status row -->
-      <div class="grid-2" style="margin-bottom:0">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Bot — Uptime</div>
-            <div class="card-meta">TEMPS DE FONCTIONNEMENT</div>
-          </div>
-          <div class="card-body" style="display:flex;align-items:center;gap:12px">
-            <span style="font-size:28px">⏱️</span>
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--accent);font-family:'Space Mono',monospace" id="admin-bot-uptime">—</div>
-              <div style="font-size:11px;color:var(--text3);margin-top:2px">Depuis le dernier redémarrage</div>
-            </div>
-          </div>
+      <div class="stats-row" style="margin-bottom:0">
+        <div class="stat-card c-green">
+          <div class="stat-top"><div class="stat-label">Uptime</div><div class="stat-icon c-green">⏱️</div></div>
+          <div class="stat-value" id="admin-bot-uptime">—</div>
+          <div class="stat-delta" id="admin-bot-started">Depuis le dernier redémarrage</div>
         </div>
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Bot — Version</div>
-            <div class="card-meta">BUILD ACTUEL</div>
-          </div>
-          <div class="card-body" style="display:flex;align-items:center;gap:12px">
-            <span style="font-size:28px">🧩</span>
-            <div>
-              <div style="font-size:22px;font-weight:700;color:var(--blue);font-family:'Space Mono',monospace" id="admin-bot-version">—</div>
-              <div style="font-size:11px;color:var(--text3);margin-top:2px">Version déployée</div>
-            </div>
-          </div>
+        <div class="stat-card c-blue">
+          <div class="stat-top"><div class="stat-label">Version</div><div class="stat-icon c-blue">🧩</div></div>
+          <div class="stat-value" id="admin-bot-version">—</div>
+          <div class="stat-delta">Build déployé</div>
+        </div>
+        <div class="stat-card c-yellow">
+          <div class="stat-top"><div class="stat-label">Latence</div><div class="stat-icon c-yellow">📡</div></div>
+          <div class="stat-value" id="admin-bot-latency">—</div>
+          <div class="stat-delta" id="admin-bot-shards">1 shard</div>
+        </div>
+        <div class="stat-card c-red">
+          <div class="stat-top"><div class="stat-label">Channels</div><div class="stat-icon c-red">💬</div></div>
+          <div class="stat-value" id="admin-bot-channels">—</div>
+          <div class="stat-delta">Channels accessibles</div>
         </div>
       </div>
 

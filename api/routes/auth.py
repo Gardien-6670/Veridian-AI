@@ -91,13 +91,15 @@ async def _exchange_code_and_fetch_user(code: str, redirect_uri: str) -> dict:
 
 def _build_filtered_guilds(all_guilds: list) -> list:
     ADMIN_PERM    = 0x8
-    bot_guild_ids = get_active_guild_ids()
+    bot_guild_ids = set(get_active_guild_ids())
     result = []
     for g in all_guilds:
         try:
             perms    = int(g.get("permissions", 0))
             guild_id = int(g.get("id", 0))
-            if (perms & ADMIN_PERM) and guild_id in bot_guild_ids:
+            is_owner = bool(g.get("owner", False))
+            is_admin = bool(perms & ADMIN_PERM)
+            if is_owner or is_admin:
                 result.append({
                     "id":   str(guild_id),
                     "name": g.get("name", "Unknown"),
@@ -105,6 +107,9 @@ def _build_filtered_guilds(all_guilds: list) -> list:
                         f"https://cdn.discordapp.com/icons/{guild_id}/{g['icon']}.png"
                         if g.get("icon") else None
                     ),
+                    "bot_present": guild_id in bot_guild_ids,
+                    "is_owner": is_owner,
+                    "is_admin": is_admin,
                 })
         except Exception:
             pass
@@ -304,7 +309,12 @@ async def exchange_temp_code(request: Request):
     # Ensure a DB session row exists for this JWT (some older DB schemas or strict SQL modes
     # could cause the callback insert to fail, which would then make /internal/* return 401).
     try:
-        if not DashboardSessionModel.get_by_token(data["jwt"]):
+        try:
+            status = DashboardSessionModel.token_status(data["jwt"])
+        except Exception:
+            status = "missing"
+
+        if status == "missing":
             u = data.get("user") or {}
             DashboardSessionModel.create(
                 discord_user_id=int(u.get("id") or 0),
@@ -335,13 +345,19 @@ async def get_current_user(request: Request):
     try:
         # Enforce server-side revocation/expiry via DB session.
         try:
-            if not DashboardSessionModel.get_by_token(token):
+            try:
+                status = DashboardSessionModel.token_status(token)
+            except Exception as e:
+                logger.warning(f"Session status check error: {e}")
+                status = "missing"
+
+            if status in {"revoked", "expired"}:
                 raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
         except HTTPException:
             raise
         except Exception as e:
             logger.warning(f"Session check error: {e}")
-            raise HTTPException(status_code=401, detail="Session invalide")
+            # Stateless fallback: accept valid JWT even if DB session is missing/broken.
 
         secret  = get_jwt_secret()
         payload = jwt.decode(
@@ -375,12 +391,26 @@ async def get_current_user_guilds(request: Request):
     token = auth_header[7:]
 
     try:
+        status = DashboardSessionModel.token_status(token)
+    except Exception as e:
+        logger.warning(f"Session status check error: {e}")
+        status = "missing"
+
+    if status in {"revoked", "expired"}:
+        raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
+
+    session_row = None
+    try:
         session_row = DashboardSessionModel.get_by_token(token)
     except Exception as e:
-        logger.warning(f"Session check error: {e}")
-        raise HTTPException(status_code=401, detail="Session invalide")
+        logger.warning(f"Session fetch error: {e}")
+
+    # Without a stored access_token we can't call Discord; return empty list (non-bloquant).
     if not session_row:
-        raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
+        return JSONResponse(
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+            content={"guilds": []},
+        )
 
     access_token = session_row.get("access_token")
     if not access_token:

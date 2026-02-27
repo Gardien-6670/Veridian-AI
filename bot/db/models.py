@@ -139,7 +139,7 @@ class TicketModel:
 
     @staticmethod
     def create(guild_id: int, user_id: int, channel_id: int,
-               user_language: str, staff_language: str = 'en',
+               user_language: str | None, staff_language: str = 'en',
                user_username: str = None) -> Optional[int]:
         with get_db_context() as conn:
             cursor = conn.cursor()
@@ -211,6 +211,19 @@ class TicketModel:
                     f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}tickets WHERE guild_id = %s",
                     (guild_id,)
                 )
+            return cursor.fetchone()[0]
+
+    @staticmethod
+    def count_this_month(guild_id: int) -> int:
+        with get_db_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}tickets "
+                f"WHERE guild_id = %s "
+                f"AND YEAR(opened_at) = YEAR(CURDATE()) "
+                f"AND MONTH(opened_at) = MONTH(CURDATE())",
+                (guild_id,),
+            )
             return cursor.fetchone()[0]
 
     @staticmethod
@@ -288,22 +301,32 @@ class TicketModel:
 class TicketMessageModel:
 
     @staticmethod
-    def create(ticket_id: int, author_id: int, author_username: str,
-               original_content: str, translated_content: str = None,
-               original_language: str = None, target_language: str = None,
-               from_cache: bool = False) -> Optional[int]:
+    def create(
+        ticket_id: int,
+        author_id: int,
+        author_username: str,
+        discord_message_id: int | None,
+        original_content: str,
+        translated_content: str = None,
+        original_language: str = None,
+        target_language: str = None,
+        from_cache: bool = False,
+        attachments_json: str | None = None,
+    ) -> Optional[int]:
         with get_db_context() as conn:
             cursor = conn.cursor()
             try:
                 query = f"""
                     INSERT INTO {DB_TABLE_PREFIX}ticket_messages
-                    (ticket_id, author_id, author_username, original_content,
-                     translated_content, original_language, target_language, from_cache)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    (ticket_id, author_id, author_username, discord_message_id,
+                     original_content, translated_content, original_language,
+                     target_language, from_cache, attachments_json)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """
                 cursor.execute(query, (
-                    ticket_id, author_id, author_username, original_content,
-                    translated_content, original_language, target_language, int(from_cache)
+                    ticket_id, author_id, author_username, discord_message_id,
+                    original_content, translated_content, original_language,
+                    target_language, int(from_cache), attachments_json
                 ))
                 return cursor.lastrowid
             except Exception as e:
@@ -773,14 +796,53 @@ class DashboardSessionModel:
                 return None
 
     @staticmethod
-    def get_by_token(jwt_token: str) -> Optional[Dict]:
+    def token_status(jwt_token: str) -> str:
+        """
+        Returns one of: valid | revoked | expired | missing
+
+        Notes:
+        - Uses MySQL NOW() for expiry comparison (server time).
+        - Backward compatible with schemas without `is_revoked`.
+        """
         with get_db_context() as conn:
             cursor = conn.cursor(dictionary=True)
             try:
                 cursor.execute(
-                    f"SELECT * FROM {DB_TABLE_PREFIX}dashboard_sessions "
-                    f"WHERE jwt_token = %s AND is_revoked = 0 AND expires_at > NOW()",
-                    (jwt_token,)
+                    f"SELECT expires_at, (expires_at > NOW()) AS not_expired, is_revoked "
+                    f"FROM {DB_TABLE_PREFIX}dashboard_sessions WHERE jwt_token = %s LIMIT 1",
+                    (jwt_token,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return "missing"
+                if int(row.get("is_revoked", 0) or 0) == 1:
+                    return "revoked"
+                return "valid" if int(row.get("not_expired", 0) or 0) == 1 else "expired"
+            except Exception as e:
+                msg = str(e).lower()
+                if "unknown column" in msg and "is_revoked" in msg:
+                    cursor.execute(
+                        f"SELECT expires_at, (expires_at > NOW()) AS not_expired "
+                        f"FROM {DB_TABLE_PREFIX}dashboard_sessions WHERE jwt_token = %s LIMIT 1",
+                        (jwt_token,),
+                    )
+                    row = cursor.fetchone()
+                    if not row:
+                        return "missing"
+                    return "valid" if int(row.get("not_expired", 0) or 0) == 1 else "expired"
+                raise
+
+    @staticmethod
+    def get_by_token(jwt_token: str) -> Optional[Dict]:
+        with get_db_context() as conn:
+            cursor = conn.cursor(dictionary=True)
+            try:
+                status = DashboardSessionModel.token_status(jwt_token)
+                if status != "valid":
+                    return None
+                cursor.execute(
+                    f"SELECT * FROM {DB_TABLE_PREFIX}dashboard_sessions WHERE jwt_token = %s LIMIT 1",
+                    (jwt_token,),
                 )
                 return cursor.fetchone()
             except Exception as e:
@@ -878,14 +940,19 @@ class AuditLogModel:
 class BotStatusModel:
 
     @staticmethod
-    def update(guild_count: int, user_count: int, uptime_sec: int, version: str) -> bool:
+    def update(guild_count: int, user_count: int, uptime_sec: int, version: str,
+               latency_ms: float = 0, shard_count: int = 1,
+               channel_count: int = 0, started_at=None) -> bool:
         with get_db_context() as conn:
             cursor = conn.cursor()
             try:
                 cursor.execute(
                     f"UPDATE {DB_TABLE_PREFIX}bot_status "
-                    f"SET guild_count=%s, user_count=%s, uptime_sec=%s, version=%s WHERE id=1",
-                    (guild_count, user_count, uptime_sec, version)
+                    f"SET guild_count=%s, user_count=%s, uptime_sec=%s, version=%s, "
+                    f"latency_ms=%s, shard_count=%s, channel_count=%s, started_at=%s "
+                    f"WHERE id=1",
+                    (guild_count, user_count, uptime_sec, version,
+                     latency_ms, shard_count, channel_count, started_at)
                 )
                 return True
             except Exception as e:
@@ -896,8 +963,15 @@ class BotStatusModel:
     def get() -> Optional[Dict]:
         with get_db_context() as conn:
             cursor = conn.cursor(dictionary=True)
-            cursor.execute(f"SELECT * FROM {DB_TABLE_PREFIX}bot_status WHERE id = 1")
-            return cursor.fetchone()
+            cursor.execute(
+                f"SELECT *, "
+                f"(TIMESTAMPDIFF(SECOND, updated_at, NOW()) < 120) AS is_online "
+                f"FROM {DB_TABLE_PREFIX}bot_status WHERE id = 1"
+            )
+            row = cursor.fetchone()
+            if row:
+                row['is_online'] = bool(row.get('is_online', 0))
+            return row
 
 
 # ============================================================================

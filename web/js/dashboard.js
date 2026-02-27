@@ -20,12 +20,16 @@ let state = {
   user: null,
   guilds: [],
   currentGuild: null,
+  guildMeta: {}, // { [guildId]: { plan?: string } }
   currentPage: "dashboard",
 };
 
 // ─────────────────────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────────────────────
+// Intervalle auto-refresh du statut bot (60s)
+let _botStatusInterval = null;
+
 document.addEventListener("DOMContentLoaded", () => {
   bindStaticActions();
   initApp();
@@ -234,6 +238,11 @@ async function logout() {
   state.user = null;
   state.guilds = [];
   state.currentGuild = null;
+  // Arrêter l'auto-refresh du statut bot
+  if (_botStatusInterval) {
+    clearInterval(_botStatusInterval);
+    _botStatusInterval = null;
+  }
   showLoginScreen();
 }
 
@@ -263,6 +272,8 @@ function renderDashboard() {
 
   // Server selector
   populateServerSelector();
+  // Fetch real plan/meta for the selected guild
+  if (state.currentGuild?.id) ensureGuildMeta(state.currentGuild.id);
 
   // CDC: navigation et pages réservées au Super Admin
   toggleSuperAdminNav(isSuper);
@@ -276,12 +287,30 @@ function renderDashboard() {
   });
 
   // CDC: masquer le bouton Upgrader (redirige vers Orders, réservé Super Admin)
-  const upgradeBtn = document.querySelector(".btn[onclick*=\"orders\"]");
+  const upgradeBtnLegacy = document.querySelector(".btn[onclick*=\"orders\"]");
+  if (upgradeBtnLegacy) upgradeBtnLegacy.style.display = isSuper ? "" : "none";
+  const upgradeBtn = document.getElementById("settings-upgrade-btn");
   if (upgradeBtn) upgradeBtn.style.display = isSuper ? "" : "none";
 
   // Charger la page par défaut selon le rôle
   const defaultPage = isSuper ? "dashboard" : "tickets";
   navigateTo(state.currentPage || defaultPage);
+
+  // Charger le statut du bot immédiatement et démarrer l'auto-refresh
+  loadBotStatus();
+  if (_botStatusInterval) clearInterval(_botStatusInterval);
+  _botStatusInterval = setInterval(loadBotStatus, 60000);
+}
+
+async function ensureGuildMeta(guildId) {
+  if (!state.token || !guildId) return;
+  try {
+    const stats = await apiFetch(`/internal/guild/${guildId}/stats`, { auth: true });
+    if (stats && stats.current_plan) {
+      state.guildMeta[guildId] = { ...(state.guildMeta[guildId] || {}), plan: stats.current_plan };
+      updateServerPlanDisplay();
+    }
+  } catch (_) {}
 }
 
 function populateServerSelector() {
@@ -296,11 +325,13 @@ function populateServerSelector() {
   }
 
   // Sélectionner le premier par défaut
-  if (!state.currentGuild) state.currentGuild = guilds[0];
+  if (!state.currentGuild) {
+    state.currentGuild = guilds.find((x) => x && x.bot_present !== false) || guilds[0];
+  }
   const g = state.currentGuild;
 
   display.querySelector(".server-name").textContent = g.name || "Serveur";
-  display.querySelector(".server-plan").textContent = g.tier || "Free";
+  updateServerPlanDisplay();
 
   // Avatar serveur
   const avatar = display.querySelector(".server-avatar");
@@ -325,6 +356,82 @@ function populateServerSelector() {
       avatar.textContent = g.name?.[0]?.toUpperCase() || "?";
     }
   }
+
+  // Peupler le dropdown
+  const dropdown = document.getElementById("server-dropdown");
+  if (dropdown && guilds.length > 0) {
+    dropdown.innerHTML = "";
+    guilds.forEach((guild) => {
+      const item = document.createElement("div");
+      item.style.cssText = "padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);transition:background .15s";
+      item.addEventListener("mouseenter", () => item.style.background = "var(--surface)");
+      item.addEventListener("mouseleave", () => item.style.background = "transparent");
+
+      const iconSpan = document.createElement("span");
+      iconSpan.style.cssText = "width:24px;height:24px;border-radius:6px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0";
+      if (guild.icon && String(guild.icon).startsWith("https://")) {
+        const img = document.createElement("img");
+        img.src = guild.icon;
+        img.alt = "";
+        img.style.cssText = "width:24px;height:24px;border-radius:6px;object-fit:cover";
+        iconSpan.appendChild(img);
+      } else {
+        iconSpan.textContent = guild.name?.[0]?.toUpperCase() || "?";
+      }
+
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = guild.name || "Serveur";
+      nameSpan.style.cssText = "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+
+      item.appendChild(iconSpan);
+      item.appendChild(nameSpan);
+
+      // Bot presence badge
+      const badge = document.createElement("span");
+      const present = guild.bot_present !== false; // default true if missing
+      badge.textContent = present ? "BOT" : "INVITER";
+      badge.style.cssText =
+        "font-size:9px;padding:2px 6px;border-radius:999px;letter-spacing:.4px;font-family:'Space Mono',monospace;flex-shrink:0;" +
+        (present
+          ? "background:rgba(0,255,170,0.10);border:1px solid rgba(0,255,170,0.18);color:var(--accent)"
+          : "background:rgba(255,184,77,0.10);border:1px solid rgba(255,184,77,0.20);color:var(--yellow)");
+      item.appendChild(badge);
+
+      if (guild.id === state.currentGuild?.id) {
+        const check = document.createElement("span");
+        check.textContent = "✓";
+        check.style.cssText = "color:var(--accent);font-size:14px;flex-shrink:0";
+        item.appendChild(check);
+      }
+
+      item.addEventListener("click", () => selectGuild(guild.id));
+      dropdown.appendChild(item);
+    });
+  }
+}
+
+function formatPlanLabel(plan) {
+  const p = String(plan || "").toLowerCase();
+  if (p === "pro") return "Pro";
+  if (p === "premium") return "Premium";
+  if (p === "free") return "Free";
+  return p ? p.toUpperCase() : "—";
+}
+
+function updateServerPlanDisplay() {
+  const display = document.getElementById("server-selector-display");
+  if (!display) return;
+  const planEl = display.querySelector(".server-plan");
+  if (!planEl) return;
+  const g = state.currentGuild;
+  if (!g) { planEl.textContent = "—"; return; }
+
+  if (g.bot_present === false) {
+    planEl.textContent = "Bot non installé";
+    return;
+  }
+  const meta = state.guildMeta?.[g.id] || {};
+  planEl.textContent = formatPlanLabel(meta.plan || "—");
 }
 
 function toggleSuperAdminNav(isSuperAdmin) {
@@ -437,11 +544,27 @@ async function loadDashboardStats() {
     const stats = await apiFetch(`/internal/guild/${guildId}/stats`, { auth: true });
 
     setStatValue("stat-tickets-actifs", stats.open_tickets ?? "—");
-    setStatValue("stat-tickets-mois", stats.total_tickets ?? "—");
+    setStatValue("stat-tickets-mois", stats.tickets_month ?? "—");
+
+    // Plan (valeur réelle, basée sur l'abonnement)
+    if (stats.current_plan) {
+      state.guildMeta[guildId] = { ...(state.guildMeta[guildId] || {}), plan: stats.current_plan };
+      updateServerPlanDisplay();
+    }
+
+    // Bar chart (7 derniers jours)
+    try {
+      const chart = document.getElementById("bar-chart");
+      if (chart) {
+        const series = buildLast7DaysSeries(stats.daily_counts || []);
+        renderBarChart(chart, series);
+      }
+    } catch (_) {}
 
     // Langues
     if (stats.languages && Array.isArray(stats.languages)) {
       renderLanguageStats(stats.languages);
+      setStatValue("stat-languages-count", stats.languages.length);
     }
 
     // Badge tickets actifs sidebar
@@ -466,9 +589,101 @@ async function loadDashboardStats() {
   }
 }
 
+function buildLast7DaysSeries(dailyCounts) {
+  // dailyCounts: [{day: 'YYYY-MM-DD', count: N}] from API
+  const byDay = new Map();
+  (dailyCounts || []).forEach((d) => {
+    if (!d) return;
+    const key = String(d.day || "");
+    const val = Number(d.count || 0);
+    if (key) byDay.set(key.slice(0, 10), val);
+  });
+
+  const labels = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
+  const out = [];
+  const now = new Date();
+  // Normalize to local midnight.
+  now.setHours(0, 0, 0, 0);
+  for (let i = 6; i >= 0; i--) {
+    const dt = new Date(now);
+    dt.setDate(now.getDate() - i);
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    const key = `${yyyy}-${mm}-${dd}`;
+    out.push({ day: labels[dt.getDay()], val: byDay.get(key) || 0 });
+  }
+  return out;
+}
+
 function setStatValue(id, value) {
   const el = document.getElementById(id);
   if (el) el.textContent = value;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// BOT STATUS (accessible à tous les utilisateurs authentifiés)
+// ─────────────────────────────────────────────────────────────────
+
+function formatUptime(seconds) {
+  if (!seconds || seconds <= 0) return "—";
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  let text = "";
+  if (d > 0) text += `${d}j `;
+  text += `${h}h ${m}m`;
+  return text.trim();
+}
+
+async function loadBotStatus() {
+  if (!state.token) return;
+
+  try {
+    const b = await apiFetch("/internal/bot/status", { auth: true });
+
+    // ── Topbar indicator (visible partout) ──
+    const dot = document.getElementById("bot-status-dot");
+    const txt = document.getElementById("bot-status-text");
+    const indicator = document.getElementById("bot-status-indicator");
+
+    if (indicator) indicator.classList.remove("offline", "unknown");
+    if (b.is_online) {
+      if (txt) txt.textContent = "BOT EN LIGNE";
+      if (indicator) indicator.title = `Latence: ${b.latency_ms}ms · ${b.guild_count} serveurs`;
+    } else {
+      if (indicator) indicator.classList.add("offline");
+      if (txt) txt.textContent = "BOT HORS LIGNE";
+      if (indicator) indicator.title = "Le bot ne répond plus depuis >2 minutes";
+    }
+
+    // ── Dashboard page: bot status cards ──
+    setStatValue("dash-bot-status", b.is_online ? "✅ En ligne" : "❌ Hors ligne");
+    setStatValue("dash-bot-latency", `Latence: ${b.latency_ms}ms`);
+    setStatValue("dash-bot-guilds", b.guild_count ?? "—");
+    setStatValue("dash-bot-users", `${b.user_count ?? 0} utilisateurs`);
+    setStatValue("dash-bot-uptime", formatUptime(b.uptime_sec));
+    setStatValue("dash-bot-version", b.version || "—");
+    setStatValue("dash-bot-shards", `${b.shard_count ?? 1} shard${(b.shard_count ?? 1) > 1 ? "s" : ""}`);
+
+    if (b.started_at) {
+      try {
+        const startDate = new Date(b.started_at);
+        setStatValue("dash-bot-started", `Depuis: ${startDate.toLocaleString("fr-FR")}`);
+      } catch (_) {
+        setStatValue("dash-bot-started", `Depuis: ${b.started_at}`);
+      }
+    }
+
+  } catch (e) {
+    // Si l'appel échoue, marquer comme statut inconnu
+    const indicator = document.getElementById("bot-status-indicator");
+    const txt = document.getElementById("bot-status-text");
+    if (indicator) { indicator.classList.remove("offline"); indicator.classList.add("unknown"); }
+    if (txt) txt.textContent = "STATUT INCONNU";
+    setStatValue("dash-bot-status", "⚠️ Inconnu");
+    console.warn("Bot status:", e.message);
+  }
 }
 
 const LANG_FLAGS = { en: "🇬🇧", fr: "🇫🇷", de: "🇩🇪", es: "🇪🇸", ru: "🇷🇺", ja: "🇯🇵", zh: "🇨🇳", pt: "🇵🇹", it: "🇮🇹" };
@@ -551,7 +766,7 @@ function renderTickets(tickets) {
       <td>${escHtml(t.user_username || String(t.user_id))}</td>
       <td><span class="${statusClass}">${escHtml(statusLabel)}</span></td>
       <td>${escHtml(flag)} ${escHtml((t.user_language || "").toUpperCase())}</td>
-      <td>${escHtml(t.staff_username || "—")}</td>
+      <td>${escHtml(t.assigned_staff_name || "—")}</td>
       <td class="mono-grey">${date}</td>
       <td>
         <button class="btn btn-ghost btn-sm btn-xs" data-ticket-action="view" data-ticket-id="${Number.isFinite(tid) ? tid : ""}" type="button">📄 Voir</button>
@@ -729,9 +944,51 @@ async function loadSettings() {
 
     const langSelect = document.getElementById("settings-default-lang");
     if (langSelect && cfg.default_language) langSelect.value = cfg.default_language;
+
+    // Toggles (valeurs réelles)
+    setToggleState("auto_translate", !!cfg.auto_translate);
+    setToggleState("public_support", !!cfg.public_support);
+    setToggleState("auto_transcript", !!cfg.auto_transcript);
+    setToggleState("ai_moderation", !!cfg.ai_moderation);
+    setToggleState("staff_suggestions", !!cfg.staff_suggestions);
+
+    // Plan actuel (valeur réelle via /stats)
+    const planEl = document.getElementById("settings-current-plan");
+    const priceEl = document.getElementById("settings-current-plan-price");
+    if (state.currentGuild?.bot_present === false) {
+      if (planEl) planEl.textContent = "Bot non installé";
+      if (priceEl) priceEl.textContent = "";
+    } else {
+      try {
+        const stats = await apiFetch(`/internal/guild/${guildId}/stats`, { auth: true });
+        const plan = stats.current_plan || "free";
+        state.guildMeta[guildId] = { ...(state.guildMeta[guildId] || {}), plan };
+        updateServerPlanDisplay();
+        if (planEl) planEl.textContent = formatPlanLabel(plan);
+        if (priceEl) {
+          priceEl.textContent =
+            String(plan).toLowerCase() === "premium" ? "— 2€/mois" :
+            String(plan).toLowerCase() === "pro" ? "— 5€/mois" : "";
+        }
+      } catch (_) {
+        if (planEl) planEl.textContent = "—";
+        if (priceEl) priceEl.textContent = "";
+      }
+    }
   } catch (e) {
     showToast("Erreur chargement config: " + e.message, "error");
   }
+}
+
+function setToggleState(key, on) {
+  const el = document.querySelector(`.toggle-switch[data-setting-key="${key}"]`);
+  if (!el) return;
+  el.classList.toggle("on", !!on);
+}
+
+function getToggleState(key) {
+  const el = document.querySelector(`.toggle-switch[data-setting-key="${key}"]`);
+  return !!(el && el.classList.contains("on"));
 }
 
 function initSettingsSave() {
@@ -745,18 +1002,27 @@ function initSettingsSave() {
     saveBtn.disabled = true;
 
     const cfg = {
+      name: state.currentGuild.name || null,
       default_language: document.getElementById("settings-default-lang")?.value || "en",
+      auto_translate: getToggleState("auto_translate"),
+      public_support: getToggleState("public_support"),
+      auto_transcript: getToggleState("auto_transcript"),
+      ai_moderation: getToggleState("ai_moderation"),
+      staff_suggestions: getToggleState("staff_suggestions"),
     };
 
     // Extraire les IDs depuis les champs texte (retirer # et @)
-    const supportVal = document.getElementById("settings-support-channel")?.value?.replace(/[#@]/g, "");
-    if (supportVal) cfg.support_channel_id = parseInt(supportVal) || null;
+    const supportVal = (document.getElementById("settings-support-channel")?.value || "").replace(/[#@]/g, "").trim();
+    cfg.support_channel_id = supportVal ? (parseInt(supportVal, 10) || null) : null;
 
-    const staffVal = document.getElementById("settings-staff-role")?.value?.replace(/[#@]/g, "");
-    if (staffVal) cfg.staff_role_id = parseInt(staffVal) || null;
+    const catVal = (document.getElementById("settings-ticket-category")?.value || "").replace(/[#@]/g, "").trim();
+    cfg.ticket_category_id = catVal ? (parseInt(catVal, 10) || null) : null;
 
-    const logVal = document.getElementById("settings-log-channel")?.value?.replace(/[#@]/g, "");
-    if (logVal) cfg.log_channel_id = parseInt(logVal) || null;
+    const staffVal = (document.getElementById("settings-staff-role")?.value || "").replace(/[#@]/g, "").trim();
+    cfg.staff_role_id = staffVal ? (parseInt(staffVal, 10) || null) : null;
+
+    const logVal = (document.getElementById("settings-log-channel")?.value || "").replace(/[#@]/g, "").trim();
+    cfg.log_channel_id = logVal ? (parseInt(logVal, 10) || null) : null;
 
     try {
       await apiPut(`/internal/guild/${state.currentGuild.id}/config`, cfg);
@@ -925,17 +1191,23 @@ async function loadSuperAdminData() {
     if (ordersContainer) ordersContainer.innerHTML = `<div style="color:var(--red);font-size:13px;text-align:center;padding:24px">❌ Erreur chargement commandes</div>`;
   }
 
-  // Statut bot (uptime + version)
+  // Statut bot (uptime + version + latency + channels)
   if (botStatus.status === "fulfilled") {
     const b = botStatus.value;
-    const uptimeEl = document.getElementById("admin-bot-uptime");
-    const versionEl = document.getElementById("admin-bot-version");
-    if (uptimeEl && b.uptime_sec != null) {
-      const h = Math.floor(b.uptime_sec / 3600);
-      const m = Math.floor((b.uptime_sec % 3600) / 60);
-      uptimeEl.textContent = `${h}h ${m}m`;
+    setStatValue("admin-bot-uptime", formatUptime(b.uptime_sec));
+    setStatValue("admin-bot-version", b.version || "—");
+    setStatValue("admin-bot-latency", b.latency_ms != null ? `${b.latency_ms}ms` : "—");
+    setStatValue("admin-bot-channels", b.channel_count ?? "—");
+    setStatValue("admin-bot-shards", `${b.shard_count ?? 1} shard${(b.shard_count ?? 1) > 1 ? "s" : ""}`);
+
+    if (b.started_at) {
+      try {
+        const startDate = new Date(b.started_at);
+        setStatValue("admin-bot-started", `Démarré: ${startDate.toLocaleString("fr-FR")}`);
+      } catch (_) {
+        setStatValue("admin-bot-started", `Démarré: ${b.started_at}`);
+      }
     }
-    if (versionEl && b.version) versionEl.textContent = b.version;
   }
 }
 
@@ -993,6 +1265,7 @@ function selectGuild(guildId) {
 
   state.currentGuild = guild;
   populateServerSelector();
+  ensureGuildMeta(guild.id);
 
   const dropdown = document.getElementById("server-dropdown");
   if (dropdown) dropdown.style.display = "none";
@@ -1029,18 +1302,16 @@ function animateProgressBars(root) {
 function initBarChart() {
   const chart = document.getElementById("bar-chart");
   if (!chart) return;
-
-  // Données placeholder — sera remplacé par loadDashboardStats()
-  const data = [
-    { day: "Lun", val: 18 },
-    { day: "Mar", val: 24 },
-    { day: "Mer", val: 15 },
-    { day: "Jeu", val: 31 },
-    { day: "Ven", val: 27 },
-    { day: "Sam", val: 12 },
-    { day: "Dim", val: 8 },
-  ];
-  renderBarChart(chart, data);
+  // Render an empty chart; real data comes from /internal/guild/{id}/stats.
+  renderBarChart(chart, [
+    { day: "—", val: 0 },
+    { day: "—", val: 0 },
+    { day: "—", val: 0 },
+    { day: "—", val: 0 },
+    { day: "—", val: 0 },
+    { day: "—", val: 0 },
+    { day: "—", val: 0 },
+  ]);
 }
 
 function renderBarChart(container, data) {

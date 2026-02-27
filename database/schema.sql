@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS vai_tickets (
     user_id             BIGINT          NOT NULL,
     user_username       VARCHAR(100)                COMMENT 'Snapshot username au moment de louverture',
     channel_id          BIGINT          UNIQUE       COMMENT 'Channel Discord du ticket',
+    initial_message_id  BIGINT                      COMMENT 'Message embed initial du ticket (pour mise a jour langue)',
     status              ENUM('open','in_progress','closed') DEFAULT 'open',
     user_language       VARCHAR(10),
     staff_language      VARCHAR(10)     DEFAULT 'en',
@@ -82,11 +83,13 @@ CREATE TABLE IF NOT EXISTS vai_ticket_messages (
     ticket_id           INT             NOT NULL,
     author_id           BIGINT,
     author_username     VARCHAR(100),
+    discord_message_id  BIGINT                      COMMENT 'Discord Message ID',
     original_content    LONGTEXT,
     translated_content  LONGTEXT,
     original_language   VARCHAR(10),
     target_language     VARCHAR(10),
     from_cache          TINYINT(1)      DEFAULT 0,
+    attachments_json    JSON                        COMMENT 'Liste d attachments (urls, filenames, etc.)',
     sent_at             TIMESTAMP       DEFAULT CURRENT_TIMESTAMP,
     KEY idx_ticket  (ticket_id),
     FOREIGN KEY (ticket_id) REFERENCES vai_tickets(id) ON DELETE CASCADE
@@ -262,12 +265,16 @@ CREATE TABLE IF NOT EXISTS vai_audit_log (
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS vai_bot_status (
-    id          INT AUTO_INCREMENT PRIMARY KEY,
-    guild_count INT             DEFAULT 0,
-    user_count  INT             DEFAULT 0,
-    uptime_sec  INT             DEFAULT 0,
-    version     VARCHAR(20),
-    updated_at  TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    guild_count     INT             DEFAULT 0,
+    user_count      INT             DEFAULT 0,
+    channel_count   INT             DEFAULT 0       COMMENT 'Nombre total de channels accessibles',
+    uptime_sec      INT             DEFAULT 0,
+    latency_ms      FLOAT           DEFAULT 0       COMMENT 'Latence WebSocket Discord en ms',
+    shard_count     INT             DEFAULT 1       COMMENT 'Nombre de shards actifs',
+    started_at      TIMESTAMP       NULL            COMMENT 'Heure de demarrage du bot',
+    version         VARCHAR(20),
+    updated_at      TIMESTAMP       DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO vai_bot_status (id, guild_count, user_count, version)
@@ -318,7 +325,14 @@ SELECT
       WHERE status = 'completed'
         AND YEAR(paid_at) = YEAR(CURDATE())
         AND MONTH(paid_at) = MONTH(CURDATE()))                                    AS revenue_month,
-    (SELECT COUNT(*) FROM vai_subscriptions WHERE is_active = 1)                   AS active_subs;
+    (SELECT COUNT(*) FROM vai_subscriptions WHERE is_active = 1)                   AS active_subs,
+    (SELECT guild_count FROM vai_bot_status WHERE id = 1)                          AS bot_guild_count,
+    (SELECT user_count FROM vai_bot_status WHERE id = 1)                           AS bot_user_count,
+    (SELECT uptime_sec FROM vai_bot_status WHERE id = 1)                           AS bot_uptime_sec,
+    (SELECT latency_ms FROM vai_bot_status WHERE id = 1)                           AS bot_latency_ms,
+    (SELECT version FROM vai_bot_status WHERE id = 1)                              AS bot_version,
+    (SELECT TIMESTAMPDIFF(SECOND, updated_at, NOW()) < 120
+       FROM vai_bot_status WHERE id = 1)                                           AS bot_is_online;
 
 -- ============================================================================
 -- Script de migration depuis v0.1 (a executer si la DB existe deja)

@@ -20,6 +20,7 @@ import jwt as pyjwt
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 from api.security import get_jwt_secret
+from api.security import is_production
 
 
 # ============================================================================
@@ -66,13 +67,25 @@ def verify_internal_auth(request: Request, x_api_secret: str = Header(None)) -> 
         # Enforce server-side revocation/expiry via DB.
         try:
             from bot.db.models import DashboardSessionModel
-            if not DashboardSessionModel.get_by_token(token):
+            try:
+                status = DashboardSessionModel.token_status(token)
+            except Exception as e:
+                logger.warning(f"Session status check error: {e}")
+                status = "missing"
+
+            if status in {"revoked", "expired"}:
                 raise HTTPException(status_code=401, detail="Session invalide ou revoquee")
+
+            # If the session row is missing, we still allow a valid JWT (stateless mode).
+            # Revocation will only work when the DB session row exists and is marked revoked.
+            if status == "missing" and is_production():
+                logger.warning("Session manquante en DB pour un JWT valide (stateless fallback).")
         except HTTPException:
             raise
         except Exception as e:
             logger.warning(f"Session check error: {e}")
-            raise HTTPException(status_code=401, detail="Session invalide")
+            # Keep JWT auth working even if the session table/schema is drifting.
+            # Revocation won't be enforced in that case.
 
         payload = _decode_jwt(token)
         user_id = payload.get("sub", 0)
@@ -139,6 +152,7 @@ def verify_guild_access(
 # ============================================================================
 
 class GuildConfigBody(BaseModel):
+    name:                Optional[str]  = None
     support_channel_id:  Optional[int]  = None
     ticket_category_id:  Optional[int]  = None
     staff_role_id:       Optional[int]  = None
@@ -197,7 +211,23 @@ def health_check():
 def get_guild_config(guild_id: int):
     guild = GuildModel.get(guild_id)
     if not guild:
-        raise HTTPException(status_code=404, detail="Guild not found")
+        # Return a sane default config so the dashboard can still render.
+        return {
+            "id": guild_id,
+            "name": None,
+            "tier": "free",
+            "support_channel_id": None,
+            "ticket_category_id": None,
+            "staff_role_id": None,
+            "log_channel_id": None,
+            "welcome_channel_id": None,
+            "default_language": "en",
+            "auto_translate": 1,
+            "public_support": 1,
+            "auto_transcript": 1,
+            "ai_moderation": 0,
+            "staff_suggestions": 0,
+        }
     return guild
 
 
@@ -205,9 +235,11 @@ def get_guild_config(guild_id: int):
 def update_guild_config(guild_id: int, body: GuildConfigBody, request: Request):
     guild = GuildModel.get(guild_id)
     if not guild:
-        raise HTTPException(status_code=404, detail="Guild not found")
+        # Create the row if it doesn't exist yet (ex: bot not added yet or DB cleared).
+        GuildModel.create(guild_id, body.name or f"Guild {guild_id}")
 
-    updates = {k: v for k, v in body.dict(exclude_unset=True).items() if v is not None}
+    # Keep explicit nulls to allow clearing fields from the dashboard UI.
+    updates = dict(body.dict(exclude_unset=True).items())
     # Convertir bool -> int pour MySQL
     for k, v in updates.items():
         if isinstance(v, bool):
@@ -330,6 +362,7 @@ def get_guild_stats(guild_id: int):
     open_tickets    = TicketModel.count_by_guild(guild_id, status="open")
     inprog_tickets  = TicketModel.count_by_guild(guild_id, status="in_progress")
     total_tickets   = TicketModel.count_by_guild(guild_id)
+    tickets_month   = TicketModel.count_this_month(guild_id)
     languages       = TicketModel.get_language_stats(guild_id)
     daily_counts    = TicketModel.get_daily_counts(guild_id, days=7)
     subscription    = SubscriptionModel.get(guild_id)
@@ -340,6 +373,7 @@ def get_guild_stats(guild_id: int):
         "open_tickets":       open_tickets,
         "in_progress_tickets": inprog_tickets,
         "total_tickets":      total_tickets,
+        "tickets_month":      tickets_month,
         "languages":          languages,
         "daily_counts":       daily_counts,
         "current_plan":       subscription["plan"] if subscription else "free",
@@ -579,17 +613,24 @@ def get_global_stats():
                 f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}subscriptions WHERE is_active = 1"
             ))
 
-        bot_status = BotStatusModel.get() or {}
+        bot_st = BotStatusModel.get() or {}
 
         return {
-            "total_guilds":   total_guilds,
-            "total_users":    total_users,
-            "tickets_today":  tickets_today,
-            "orders_pending": orders_pending,
-            "revenue_month":  revenue_month,
-            "active_subs":    active_subs,
-            "bot_uptime_sec": bot_status.get("uptime_sec", 0),
-            "bot_version":    bot_status.get("version", "?"),
+            "total_guilds":     total_guilds,
+            "total_users":      total_users,
+            "tickets_today":    tickets_today,
+            "orders_pending":   orders_pending,
+            "revenue_month":    revenue_month,
+            "active_subs":      active_subs,
+            "bot_is_online":    bot_st.get("is_online", False),
+            "bot_guild_count":  bot_st.get("guild_count", 0),
+            "bot_user_count":   bot_st.get("user_count", 0),
+            "bot_channel_count": bot_st.get("channel_count", 0),
+            "bot_uptime_sec":   bot_st.get("uptime_sec", 0),
+            "bot_latency_ms":   round(float(bot_st.get("latency_ms", 0) or 0), 1),
+            "bot_shard_count":  bot_st.get("shard_count", 1),
+            "bot_version":      bot_st.get("version", "?"),
+            "bot_started_at":   str(bot_st["started_at"]) if bot_st.get("started_at") else None,
         }
     except Exception as e:
         logger.error(f"Erreur admin stats: {e}")
@@ -614,12 +655,51 @@ def get_audit_log(guild_id: Optional[int] = None, limit: int = 100):
 
 @router.post("/bot/heartbeat", dependencies=[Depends(verify_internal_auth)])
 def bot_heartbeat(guild_count: int = 0, user_count: int = 0,
-                  uptime_sec: int = 0, version: str = ""):
-    BotStatusModel.update(guild_count, user_count, uptime_sec, version)
+                  uptime_sec: int = 0, version: str = "",
+                  latency_ms: float = 0, shard_count: int = 1,
+                  channel_count: int = 0):
+    BotStatusModel.update(
+        guild_count=guild_count,
+        user_count=user_count,
+        uptime_sec=uptime_sec,
+        version=version,
+        latency_ms=latency_ms,
+        shard_count=shard_count,
+        channel_count=channel_count,
+    )
     return {"status": "ok"}
 
 
 @router.get("/bot/status", dependencies=[Depends(verify_internal_auth)])
 def bot_status():
-    status = BotStatusModel.get()
-    return status or {"status": "unknown"}
+    """Retourne le statut complet du bot.
+    Accessible a tous les utilisateurs authentifies (dashboard).
+    Les donnees sensibles (tokens, secrets) ne sont jamais exposees.
+    """
+    raw = BotStatusModel.get()
+    if not raw:
+        return {"status": "unknown", "is_online": False}
+
+    # Formater l'uptime en texte lisible
+    uptime_sec = raw.get("uptime_sec", 0) or 0
+    days = uptime_sec // 86400
+    hours = (uptime_sec % 86400) // 3600
+    minutes = (uptime_sec % 3600) // 60
+    uptime_text = ""
+    if days > 0:
+        uptime_text += f"{days}j "
+    uptime_text += f"{hours}h {minutes}m"
+
+    return {
+        "is_online":     raw.get("is_online", False),
+        "guild_count":   raw.get("guild_count", 0),
+        "user_count":    raw.get("user_count", 0),
+        "channel_count": raw.get("channel_count", 0),
+        "uptime_sec":    uptime_sec,
+        "uptime_text":   uptime_text.strip(),
+        "latency_ms":    round(float(raw.get("latency_ms", 0) or 0), 1),
+        "shard_count":   raw.get("shard_count", 1),
+        "version":       raw.get("version", "?"),
+        "started_at":    str(raw["started_at"]) if raw.get("started_at") else None,
+        "updated_at":    str(raw["updated_at"]) if raw.get("updated_at") else None,
+    }

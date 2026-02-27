@@ -5,11 +5,12 @@ Charge tous les cogs et établit la connexion avec Discord
 
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from loguru import logger
 from dotenv import load_dotenv
 import asyncio
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Charger les variables d'environnement
@@ -38,6 +39,10 @@ logger.add(sys.stdout, format="{message}", level="INFO")
 
 # Import config après logs setup
 from bot.config import VERSION, VERSION_EMOJI
+from bot.config import DASHBOARD_URL
+
+# Heure de démarrage du bot (sera mise à jour dans on_ready)
+_bot_start_time: datetime | None = None
 
 # Fonction d'initialisation DB
 def initialize_database():
@@ -117,6 +122,9 @@ bot = commands.Bot(
 @bot.event
 async def on_ready():
     """Événement déclenché quand le bot est prêt."""
+    global _bot_start_time
+    _bot_start_time = datetime.now(timezone.utc)
+    
     status_text = f"{VERSION_EMOJI} v{VERSION}"
     await bot.change_presence(
         activity=discord.Activity(
@@ -138,6 +146,70 @@ async def on_ready():
     except Exception as e:
         logger.error(f"✗ Erreur synchronisation commandes: {e}")
 
+    # S'assurer que tous les serveurs actuels existent en DB (au cas où)
+    try:
+        from bot.db.models import GuildModel
+        for g in bot.guilds:
+            try:
+                GuildModel.create(g.id, g.name)
+            except Exception:
+                pass
+    except Exception as e:
+        logger.debug(f"Guild DB sync failed: {e}")
+    
+    # Démarrer le heartbeat (mise à jour du statut en DB)
+    if not heartbeat_loop.is_running():
+        heartbeat_loop.start()
+        logger.info("✓ Heartbeat démarré (intervalle: 60s)")
+    
+    # Premier heartbeat immédiat
+    await _update_bot_status()
+
+
+@tasks.loop(seconds=60)
+async def heartbeat_loop():
+    """Met à jour le statut du bot en DB toutes les 60 secondes.
+    Le dashboard lit cette table pour afficher l'indicateur 'BOT EN LIGNE',
+    l'uptime, le nombre de serveurs, la latence, etc.
+    """
+    await _update_bot_status()
+
+
+@heartbeat_loop.before_loop
+async def before_heartbeat():
+    """Attend que le bot soit prêt avant de démarrer le heartbeat."""
+    await bot.wait_until_ready()
+
+
+async def _update_bot_status():
+    """Écrit les métriques du bot dans vai_bot_status (id=1)."""
+    try:
+        from bot.db.models import BotStatusModel
+        
+        guild_count = len(bot.guilds)
+        user_count = sum(g.member_count or 0 for g in bot.guilds)
+        channel_count = sum(len(g.channels) for g in bot.guilds)
+        latency_ms = round(bot.latency * 1000, 2) if bot.latency else 0
+        shard_count = bot.shard_count or 1
+        
+        uptime_sec = 0
+        if _bot_start_time:
+            uptime_sec = int((datetime.now(timezone.utc) - _bot_start_time).total_seconds())
+        
+        BotStatusModel.update(
+            guild_count=guild_count,
+            user_count=user_count,
+            uptime_sec=uptime_sec,
+            version=VERSION,
+            latency_ms=latency_ms,
+            shard_count=shard_count,
+            channel_count=channel_count,
+            started_at=_bot_start_time.strftime('%Y-%m-%d %H:%M:%S') if _bot_start_time else None,
+        )
+        logger.debug(f"♥ Heartbeat: {guild_count} guilds, {user_count} users, {uptime_sec}s uptime, {latency_ms}ms latency")
+    except Exception as e:
+        logger.warning(f"⚠ Heartbeat échoué: {e}")
+
 
 @bot.event
 async def on_guild_join(guild: discord.Guild):
@@ -148,11 +220,41 @@ async def on_guild_join(guild: discord.Guild):
     from bot.db.models import GuildModel
     GuildModel.create(guild.id, guild.name)
 
+    # DM au owner avec le lien de configuration
+    try:
+        owner = None
+        try:
+            if guild.owner:
+                owner = guild.owner
+        except Exception:
+            owner = None
+
+        if not owner and guild.owner_id:
+            try:
+                owner = await bot.fetch_user(int(guild.owner_id))
+            except Exception:
+                owner = None
+
+        if owner:
+            await owner.send(
+                f"Merci d'avoir ajouté **Veridian AI** sur **{guild.name}**.\n"
+                f"Configure le bot via le dashboard : {DASHBOARD_URL}\n"
+                "Sélectionne ton serveur puis configure Tickets / Support / Langue."
+            )
+    except Exception as e:
+        logger.debug(f"DM owner failed for guild {guild.id}: {e}")
+    
+    # Mettre à jour le statut immédiatement (nouveau serveur)
+    await _update_bot_status()
+
 
 @bot.event
 async def on_guild_remove(guild: discord.Guild):
     """Événement déclenché quand le bot quitte un serveur."""
     logger.info(f"✗ Bot supprimé du serveur: {guild.name} ({guild.id})")
+    
+    # Mettre à jour le statut immédiatement (serveur perdu)
+    await _update_bot_status()
 
 
 async def load_cogs():
