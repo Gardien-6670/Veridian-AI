@@ -111,6 +111,7 @@ app.add_middleware(
         "Authorization",
         "Content-Type",
         "X-API-SECRET",
+        "X-VAI-Authorization",
         "X-WEBHOOK-SIGNATURE",
         "X-Oxapay-Signature",
     ],

@@ -509,6 +509,8 @@ async function apiFetch(path, { auth = false, method = "GET", body = null } = {}
   // et n'est jamais exposé dans le navigateur.
   if ((auth || path.startsWith("/internal/")) && state.token) {
     headers["Authorization"] = `Bearer ${state.token}`;
+    // Fallback for some infrastructures that may strip Authorization.
+    headers["X-VAI-Authorization"] = `Bearer ${state.token}`;
   }
 
   const opts = { method, headers };

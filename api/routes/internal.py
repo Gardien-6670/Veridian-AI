@@ -60,9 +60,21 @@ def verify_internal_auth(request: Request, x_api_secret: str = Header(None)) -> 
         return {"is_bot": True, "is_super_admin": True, "user_id": 0}
 
     # 2. JWT Bearer (dashboard utilisateur)
-    auth_header = request.headers.get("Authorization", "")
+    # Some reverse proxies / CDNs may strip the standard Authorization header.
+    # The dashboard also sends `X-VAI-Authorization` as a fallback.
+    auth_header = request.headers.get("Authorization", "") or ""
+    alt_header = request.headers.get("X-VAI-Authorization", "") or ""
+
+    token = None
     if auth_header.startswith("Bearer "):
         token = auth_header[7:]
+    elif alt_header.startswith("Bearer "):
+        token = alt_header[7:]
+    elif alt_header:
+        # Allow raw token value in the fallback header.
+        token = alt_header.strip()
+
+    if token:
 
         # Enforce server-side revocation/expiry via DB.
         try:
