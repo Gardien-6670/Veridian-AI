@@ -22,8 +22,8 @@
   "feature_translation_desc": "Tus usuarios escriben en su idioma, el personal responde en el suyo. El bot traduce automáticamente en ambas direcciones mediante IA.",
   "feature_support": "Soporte público con IA",
   "feature_support_desc": "El bot responde automáticamente a preguntas frecuentes en canales designados, en el idioma de cada usuario.",
-  "feature_fallback": "Fallback 4 claves de IA",
-  "feature_fallback_desc": "4 claves API de Groq que rotan automáticamente. Si una se agota, la siguiente toma el relevo sin interrupción del servicio.",
+  "feature_fallback": "4 modelos de IA recientes",
+  "feature_fallback_desc": "4 modelos de IA recientes rotan automáticamente. Si uno llega a su límite, el siguiente toma el relevo sin interrupción.",
   "feature_dashboard": "Panel web",
   "feature_dashboard_desc": "Gestiona todo desde tu navegador. Inicio de sesión con Discord OAuth2, configuración del bot, tickets, base de conocimientos y estadísticas.",
   "feature_cache": "Caché inteligente",
@@ -51,7 +51,7 @@
   "plan_premium": "Premium",
   "plan_premium_price": "2",
   "plan_premium_desc": "Para comunidades activas con soporte internacional.",
-  "plan_premium_badge": "⭐ POPULAR",
+  "plan_premium_badge": "POPULAR",
   "plan_pro": "Pro",
   "plan_pro_price": "5",
   "plan_pro_desc": "Para servidores de alto volumen con necesidades avanzadas.",
@@ -109,5 +109,5 @@
   "footer_privacy": "Privacidad",
   "footer_copyright": "© 2025 Veridian AI — veridiancloud.xyz",
   "footer_bot_status": "Bot en línea",
-  "footer_powered": "Impulsado por Groq · discord.py · MySQL"
+  "footer_powered": "Impulsado por Llama 3 · discord.py · MySQL"
 }
