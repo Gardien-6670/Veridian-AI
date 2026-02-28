@@ -37,8 +37,21 @@ def _parse_json(raw, default):
         return default
 
 
-def _embed_color(name: str | None) -> discord.Color:
-    n = (name or "").strip().lower()
+def _embed_color(raw: str | None) -> discord.Color:
+    n = (raw or "").strip().lower()
+    if not n:
+        return discord.Color.blue()
+
+    # Accept hex colors from dashboard (e.g. #4da6ff)
+    if n.startswith("#") and len(n) in (4, 7):
+        try:
+            if len(n) == 4:
+                n = "#" + "".join([c * 2 for c in n[1:]])
+            return discord.Color(int(n[1:], 16))
+        except Exception:
+            return discord.Color.blue()
+
+    # Backward compatible named colors
     return {
         "blue": discord.Color.blue(),
         "green": discord.Color.green(),

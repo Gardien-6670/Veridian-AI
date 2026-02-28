@@ -354,6 +354,13 @@ def _ensure_guild_v04_migrations() -> None:
         return
 
     new_columns = {
+        # Core feature toggles (for schema drift safety)
+        "auto_translate":             "TINYINT(1) DEFAULT 1 COMMENT 'Traduction auto tickets'",
+        "public_support":             "TINYINT(1) DEFAULT 1 COMMENT 'IA channel support public'",
+        "auto_transcript":            "TINYINT(1) DEFAULT 1 COMMENT 'Resume IA fermeture ticket'",
+        "ai_moderation":              "TINYINT(1) DEFAULT 0 COMMENT 'Moderation IA'",
+        "staff_suggestions":          "TINYINT(1) DEFAULT 0 COMMENT 'Suggestions staff IA'",
+
         "ticket_open_channel_id":     "BIGINT NULL COMMENT 'Channel bouton/selecteur ouverture ticket'",
         "ticket_open_message":        "TEXT NULL COMMENT 'Message avec bouton/selecteur'",
         "ticket_button_label":        "VARCHAR(100) DEFAULT 'Ouvrir un ticket'",

@@ -1050,7 +1050,7 @@ async function loadSettings() {
       "settings-ticket-selector-placeholder": cfg.ticket_selector_placeholder || "Sélectionnez le type de ticket",
       "settings-ticket-selector-options": typeof cfg.ticket_selector_options === "string" ? cfg.ticket_selector_options : (cfg.ticket_selector_options ? JSON.stringify(cfg.ticket_selector_options, null, 2) : "[]"),
       "settings-ticket-welcome-message": cfg.ticket_welcome_message || "",
-      "settings-ticket-welcome-color": cfg.ticket_welcome_color || "blue",
+      "settings-ticket-welcome-color": cfg.ticket_welcome_color || "#4DA6FF",
       "settings-ticket-max-open": (cfg.ticket_max_open ?? 1),
       "settings-staff-languages": typeof cfg.staff_languages_json === "string" ? cfg.staff_languages_json : (cfg.staff_languages_json ? JSON.stringify(cfg.staff_languages_json, null, 2) : "[]"),
 
@@ -1162,7 +1162,7 @@ function initSettingsSave() {
       ticket_button_style: (document.getElementById("settings-ticket-button-style")?.value || "primary").trim(),
       ticket_button_emoji: (document.getElementById("settings-ticket-button-emoji")?.value || "").trim(),
       ticket_welcome_message: (document.getElementById("settings-ticket-welcome-message")?.value || "").trim(),
-      ticket_welcome_color: (document.getElementById("settings-ticket-welcome-color")?.value || "blue").trim(),
+      ticket_welcome_color: (document.getElementById("settings-ticket-welcome-color")?.value || "#4DA6FF").trim(),
       ticket_selector_enabled: (document.getElementById("settings-ticket-open-type")?.value || "button") === "select",
       ticket_selector_placeholder: (document.getElementById("settings-ticket-selector-placeholder")?.value || "").trim(),
       ticket_selector_options: (document.getElementById("settings-ticket-selector-options")?.value || "").trim(),

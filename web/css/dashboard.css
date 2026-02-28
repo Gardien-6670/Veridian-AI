@@ -514,6 +514,10 @@ body::before {
 
 /* Grid layouts */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.grid-2 > * { min-width: 0; }
+@media (max-width: 920px){
+  .grid-2{ grid-template-columns: 1fr; }
+}
 .grid-3-2 { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-bottom: 16px; }
 .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
 
@@ -833,6 +837,7 @@ body::before {
 }
 .form-input, .form-select {
   width: 100%;
+  max-width: 100%;
   background: var(--surface);
   border: 1px solid var(--border2);
   border-radius: 8px;
@@ -847,6 +852,7 @@ body::before {
 .form-input:focus, .form-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim2); }
 .form-input::placeholder { color: var(--text3); }
 .form-select option { background: var(--bg3); }
+textarea.form-input{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
 
 .toggle-row {
   display: flex;
