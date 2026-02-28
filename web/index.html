@@ -57,7 +57,7 @@
   <section class="hero" id="home">
     <div class="hero-badge">
       <div class="hero-badge-dot"></div>
-      <span data-i18n="hero_badge">BETA 0.0.1 — En cours de développement</span>
+      <span data-i18n="hero_badge">BETA 0.1.0 — En cours de développement</span>
     </div>
 
     <h1 class="hero-title">
@@ -164,8 +164,12 @@
             <path d="M13 2l-7 11h6l-1 9 7-11h-6z"></path>
           </svg>
         </div>
-        <div class="feature-title" data-i18n="feature_fallback">4 modèles IA récentes</div>
-        <div class="feature-desc" data-i18n="feature_fallback_desc">4 modèles IA récents tournent automatiquement. Si l'un atteint sa limite, le suivant prend le relais sans interruption.</div>
+        <div class="feature-title" data-i18n="feature_fallback">Moteur IA par plan</div>
+        <div class="feature-desc" data-i18n="feature_fallback_desc">Chaque fonctionnalité utilise un modèle IA dédié avec jusqu'à 3 fallbacks automatiques. Si l'un atteint sa limite, le suivant prend le relais sans interruption.</div>
+        <a href="moteur-ia.html" class="feature-detail-link">
+          Voir tous les modèles IA par fonctionnalité
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
         <span class="feature-tag" data-i18n="high_availability">HAUTE DISPO</span>
       </div>
 
@@ -399,6 +403,9 @@
       </div>
     </div>
   </footer>
+
+  <!-- ── GRID TRACE ── -->
+  <canvas id="grid-trace" style="position:fixed;inset:0;pointer-events:none;z-index:0;"></canvas>
 
   <script src="js/main.js"></script>
 </body>

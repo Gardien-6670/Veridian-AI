@@ -564,13 +564,42 @@ section { position: relative; z-index: 1; }
   border-radius: 20px;
   padding: 32px;
   position: relative;
-  transition: all 0.25s;
+  transition: all 0.3s;
 }
-.pricing-card:hover { transform: translateY(-4px); }
+.pricing-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(45,255,143,0.35);
+  box-shadow: 0 0 40px rgba(45,255,143,0.12), 0 8px 32px rgba(0,0,0,0.3);
+}
 .pricing-card.featured {
   border-color: var(--accent);
   background: linear-gradient(160deg, var(--surface2), var(--bg3));
   box-shadow: 0 0 60px rgba(45,255,143,0.12);
+}
+.pricing-card.featured:hover {
+  box-shadow: 0 0 80px rgba(45,255,143,0.22), 0 8px 40px rgba(45,255,143,0.1);
+  border-color: var(--accent);
+}
+
+/* ── FEATURE DETAIL LINK ── */
+.feature-detail-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-top: 14px;
+  margin-bottom: 2px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s, gap 0.2s;
+  cursor: pointer;
+}
+.feature-detail-link:hover {
+  border-bottom-color: var(--accent);
+  gap: 10px;
 }
 .featured-badge {
   position: absolute;
