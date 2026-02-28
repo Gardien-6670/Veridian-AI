@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Moteur IA — Veridian AI</title>
+  <title data-i18n="ia_title_page">Moteur IA — Veridian AI</title>
   <meta name="description" content="Détail des modèles IA utilisés par Veridian AI pour chaque fonctionnalité, avec système de fallback automatique.">
   <link rel="icon" type="image/png" href="assets/logo veridian ai.png">
   <link rel="stylesheet" href="css/style.css">
+  <script src="js/i18n.js" defer></script>
   <style>
     /* ── PAGE LAYOUT ── */
     .ia-page {
@@ -239,13 +240,13 @@
       <img src="assets/logo veridian ai.png" alt="Veridian AI" style="height:32px;width:auto">
     </a>
     <div class="nav-links">
-      <a href="/#features" class="nav-link">Fonctionnalités</a>
-      <a href="/#how" class="nav-link">Comment ça marche</a>
-      <a href="/#pricing" class="nav-link">Tarifs</a>
-      <a href="https://docs.veridiancloud.xyz" class="nav-link">Docs</a>
+      <a href="/#features" class="nav-link" data-i18n="nav_features">Fonctionnalités</a>
+      <a href="/#how" class="nav-link" data-i18n="nav_how">Comment ça marche</a>
+      <a href="/#pricing" class="nav-link" data-i18n="nav_pricing">Tarifs</a>
+      <a href="https://docs.veridiancloud.xyz" class="nav-link" data-i18n="nav_docs">Docs</a>
     </div>
     <div class="nav-right">
-      <a href="/dashboard" class="btn btn-ghost btn-sm">Dashboard</a>
+      <a href="/dashboard" class="btn btn-ghost btn-sm" data-i18n="nav_dashboard">Dashboard</a>
       <a href="#" class="btn btn-primary btn-sm" data-discord>
         <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
           <path d="M13.54 1.02A13.27 13.27 0 0010.34 0c-.14.26-.3.6-.41.88a12.3 12.3 0 00-3.86 0A9.5 9.5 0 005.66 0 13.34 13.34 0 002.45 1.03C.35 4.18-.22 7.24.07 10.26a13.4 13.4 0 004.09 2.07 10.07 10.07 0 00.87-1.42 8.7 8.7 0 01-1.37-.66c.11-.08.23-.17.33-.25a9.55 9.55 0 008.02 0c.11.09.22.17.33.25a8.8 8.8 0 01-1.38.67c.25.5.54.98.87 1.42a13.35 13.35 0 004.1-2.07c.34-3.53-.57-6.57-2.39-9.25zM5.34 8.41c-.83 0-1.52-.77-1.52-1.71s.67-1.71 1.52-1.71c.84 0 1.54.77 1.52 1.71 0 .94-.68 1.71-1.52 1.71zm5.32 0c-.84 0-1.52-.77-1.52-1.71s.67-1.71 1.52-1.71c.84 0 1.54.77 1.52 1.71 0 .94-.67 1.71-1.52 1.71z" fill="currentColor"/>
@@ -259,24 +260,24 @@
 
     <a href="/" class="back-btn">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-      Retour à l'accueil
+      <span data-i18n="ia_back_home">Retour à l'accueil</span>
     </a>
 
     <header class="ia-header reveal">
-      <div class="section-label">Architecture IA</div>
-      <h1>Moteur IA <span>par fonctionnalité</span></h1>
+      <div class="section-label" data-i18n="ia_section_label">Architecture IA</div>
+      <h1><span data-i18n="ia_title">Moteur IA</span> <span data-i18n="ia_title_accent">par fonctionnalité</span></h1>
       <p>
-        Chaque fonctionnalité de Veridian AI tourne sur un modèle principal optimisé, avec 3 niveaux de fallback automatiques. En cas de surcharge ou d'indisponibilité, le relais est immédiat — sans interruption de service.
+        <span data-i18n="ia_intro">Chaque fonctionnalité de Veridian AI tourne sur un modèle principal optimisé, avec 3 niveaux de fallback automatiques. En cas de surcharge ou d'indisponibilité, le relais est immédiat — sans interruption de service.</span>
       </p>
     </header>
 
     <!-- Legend -->
     <div class="ia-legend reveal">
       <div class="legend-item">
-        <span class="legend-dot yes"></span> Inclus dans ce plan
+        <span class="legend-dot yes"></span> <span data-i18n="ia_legend_included">Inclus dans ce plan</span>
       </div>
       <div class="legend-item">
-        <span class="legend-dot no"></span> Non inclus
+        <span class="legend-dot no"></span> <span data-i18n="ia_legend_not_included">Non inclus</span>
       </div>
       <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
         <span class="plan-pill free">FREE</span>
@@ -287,26 +288,26 @@
 
     <!-- Table -->
     <div class="ia-table-wrap reveal">
-      <table class="ia-table" role="table" aria-label="Modèles IA par fonctionnalité">
+      <table class="ia-table" role="table" data-i18n-aria-label="ia_table_aria" aria-label="Modèles IA par fonctionnalité">
         <thead>
           <tr>
-            <th>Fonctionnalité</th>
-            <th class="col-model">Modèle principal</th>
-            <th class="col-model">Fallback 1</th>
-            <th class="col-model">Fallback 2</th>
-            <th class="col-model">Fallback 3</th>
-            <th class="col-plan">Free</th>
-            <th class="col-plan">Premium</th>
-            <th class="col-plan">Pro</th>
+            <th data-i18n="ia_th_feature">Fonctionnalité</th>
+            <th class="col-model" data-i18n="ia_th_primary">Modèle principal</th>
+            <th class="col-model" data-i18n="ia_th_fallback1">Fallback 1</th>
+            <th class="col-model" data-i18n="ia_th_fallback2">Fallback 2</th>
+            <th class="col-model" data-i18n="ia_th_fallback3">Fallback 3</th>
+            <th class="col-plan" data-i18n="ia_plan_free">Free</th>
+            <th class="col-plan" data-i18n="ia_plan_premium">Premium</th>
+            <th class="col-plan" data-i18n="ia_plan_pro">Pro</th>
           </tr>
         </thead>
         <tbody>
 
           <!-- LANGUAGE -->
-          <tr class="cat-row"><td colspan="8">Langage &amp; Traduction</td></tr>
+          <tr class="cat-row"><td colspan="8" data-i18n="ia_cat_language">Langage &amp; Traduction</td></tr>
 
           <tr>
-            <td>Support public IA</td>
+            <td data-i18n="ia_feat_public_support">Support public IA</td>
             <td><span class="model-primary">Llama 3.3 70B</span></td>
             <td><span class="model-primary">Llama 3.3 70B</span></td>
             <td><span class="model-primary">Llama 4 Scout</span></td>
@@ -317,7 +318,7 @@
           </tr>
 
           <tr>
-            <td>Traduction tickets</td>
+            <td data-i18n="ia_feat_ticket_translate">Traduction tickets</td>
             <td><span class="model-primary">Llama 4 Scout</span></td>
             <td><span class="model-primary">Llama 4 Scout</span></td>
             <td><span class="model-primary">Llama 3.3 70B</span></td>
@@ -328,7 +329,7 @@
           </tr>
 
           <tr>
-            <td>Multilingue avancé</td>
+            <td data-i18n="ia_feat_advanced_multilang">Multilingue avancé</td>
             <td><span class="model-primary">Kimi K2</span></td>
             <td><span class="model-primary">Kimi K2</span></td>
             <td><span class="model-primary">GPT OSS 120B</span></td>
@@ -339,10 +340,10 @@
           </tr>
 
           <!-- CONTENT -->
-          <tr class="cat-row"><td colspan="8">Résumé &amp; Transcription</td></tr>
+          <tr class="cat-row"><td colspan="8" data-i18n="ia_cat_summary">Résumé &amp; Transcription</td></tr>
 
           <tr>
-            <td>Résumé / Transcription</td>
+            <td data-i18n="ia_feat_summary_transcription">Résumé / Transcription</td>
             <td><span class="model-primary">GPT OSS 20B</span></td>
             <td><span class="model-primary">GPT OSS 20B</span></td>
             <td><span class="model-primary">Llama 3.3 70B</span></td>
@@ -353,10 +354,10 @@
           </tr>
 
           <!-- REASONING -->
-          <tr class="cat-row"><td colspan="8">Raisonnement &amp; Function Calling</td></tr>
+          <tr class="cat-row"><td colspan="8" data-i18n="ia_cat_reasoning">Raisonnement &amp; Function Calling</td></tr>
 
           <tr>
-            <td>Reasoning complexe</td>
+            <td data-i18n="ia_feat_complex_reasoning">Reasoning complexe</td>
             <td><span class="model-primary">Qwen 3 32B</span></td>
             <td><span class="model-primary">Qwen 3 32B</span></td>
             <td><span class="model-primary">GPT OSS 120B</span></td>
@@ -367,7 +368,7 @@
           </tr>
 
           <tr>
-            <td>Function Calling basique</td>
+            <td data-i18n="ia_feat_fc_basic">Function Calling basique</td>
             <td><span class="model-primary">Llama 4 Scout</span></td>
             <td><span class="model-primary">Llama 4 Scout</span></td>
             <td><span class="model-primary">GPT OSS 20B</span></td>
@@ -378,7 +379,7 @@
           </tr>
 
           <tr>
-            <td>Function Calling avancé</td>
+            <td data-i18n="ia_feat_fc_advanced">Function Calling avancé</td>
             <td><span class="model-primary">GPT OSS 120B</span></td>
             <td><span class="model-primary">GPT OSS 120B</span></td>
             <td><span class="model-primary">Kimi K2</span></td>
@@ -389,10 +390,10 @@
           </tr>
 
           <!-- VISION -->
-          <tr class="cat-row"><td colspan="8">Vision</td></tr>
+          <tr class="cat-row"><td colspan="8" data-i18n="ia_cat_vision">Vision</td></tr>
 
           <tr>
-            <td>Vision (cartes cadeaux)</td>
+            <td data-i18n="ia_feat_vision_giftcards">Vision (cartes cadeaux)</td>
             <td><span class="model-primary">Llama 4 Scout</span></td>
             <td><span class="model-primary">Llama 4 Scout</span></td>
             <td><span class="model-primary">Llama 4 Maverick</span></td>
@@ -403,7 +404,7 @@
           </tr>
 
           <tr>
-            <td>Vision haute qualité</td>
+            <td data-i18n="ia_feat_vision_hq">Vision haute qualité</td>
             <td><span class="model-primary">Llama 4 Maverick</span></td>
             <td><span class="model-primary">Llama 4 Maverick</span></td>
             <td><span class="model-primary">Llama 4 Scout</span></td>
@@ -414,10 +415,10 @@
           </tr>
 
           <!-- AUDIO -->
-          <tr class="cat-row"><td colspan="8">Audio</td></tr>
+          <tr class="cat-row"><td colspan="8" data-i18n="ia_cat_audio">Audio</td></tr>
 
           <tr>
-            <td>Speech to Text</td>
+            <td data-i18n="ia_feat_stt">Speech to Text</td>
             <td><span class="model-primary">Whisper v3 Turbo</span></td>
             <td><span class="model-primary">Whisper v3 Turbo</span></td>
             <td><span class="model-primary">Whisper v3</span></td>
@@ -428,7 +429,7 @@
           </tr>
 
           <tr>
-            <td>Speech to Text précis</td>
+            <td data-i18n="ia_feat_stt_precise">Speech to Text précis</td>
             <td><span class="model-primary">Whisper v3</span></td>
             <td><span class="model-primary">Whisper v3</span></td>
             <td><span class="model-primary">Whisper v3 Turbo</span></td>
@@ -439,7 +440,7 @@
           </tr>
 
           <tr>
-            <td>Text to Speech</td>
+            <td data-i18n="ia_feat_tts">Text to Speech</td>
             <td><span class="model-primary">Orpheus EN</span></td>
             <td><span class="model-primary">Orpheus EN</span></td>
             <td><span class="model-primary">Orpheus AR</span></td>
@@ -450,10 +451,10 @@
           </tr>
 
           <!-- SAFETY -->
-          <tr class="cat-row"><td colspan="8">Sécurité</td></tr>
+          <tr class="cat-row"><td colspan="8" data-i18n="ia_cat_security">Sécurité</td></tr>
 
           <tr>
-            <td>Modération</td>
+            <td data-i18n="ia_feat_moderation">Modération</td>
             <td><span class="model-primary">Safety GPT OSS 20B</span></td>
             <td><span class="model-primary">Safety GPT OSS 20B</span></td>
             <td><span class="model-primary">Safety GPT OSS 20B</span></td>
@@ -469,16 +470,16 @@
 
     <!-- Note -->
     <div class="ia-note reveal">
-      <strong>Comment fonctionne le fallback ?</strong><br>
-      Chaque fonctionnalité dispose d'un modèle principal et de 3 niveaux de secours. Si le modèle principal est indisponible ou atteint sa limite de débit, la requête est automatiquement reroutée vers le fallback suivant — en quelques millisecondes, sans aucune interruption visible pour vos utilisateurs. Ce mécanisme garantit un uptime de 99 % sur l'ensemble des fonctionnalités.
+      <strong data-i18n="ia_fallback_title">Comment fonctionne le fallback ?</strong><br>
+      <span data-i18n="ia_fallback_desc">Chaque fonctionnalité dispose d'un modèle principal et de 3 niveaux de secours. Si le modèle principal est indisponible ou atteint sa limite de débit, la requête est automatiquement reroutée vers le fallback suivant — en quelques millisecondes, sans aucune interruption visible pour vos utilisateurs. Ce mécanisme garantit un uptime de 99 % sur l'ensemble des fonctionnalités.</span>
     </div>
 
     <!-- CTA -->
     <div style="margin-top:48px;text-align:center" class="reveal">
-      <p style="color:var(--text2);font-size:15px;margin-bottom:20px">Prêt à profiter de toute la puissance du moteur IA ?</p>
+      <p style="color:var(--text2);font-size:15px;margin-bottom:20px" data-i18n="ia_cta_question">Prêt à profiter de toute la puissance du moteur IA ?</p>
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <a href="/#pricing" class="btn btn-primary btn-lg">Voir les tarifs</a>
-        <a href="/" class="btn btn-ghost btn-lg">Retour à l'accueil</a>
+        <a href="/#pricing" class="btn btn-primary btn-lg" data-i18n="cta_pricing">Voir les tarifs</a>
+        <a href="/" class="btn btn-ghost btn-lg" data-i18n="ia_back_home_btn">Retour à l'accueil</a>
       </div>
     </div>
 
@@ -488,9 +489,9 @@
   <footer>
     <div class="footer-inner">
       <div class="footer-bottom" style="border-top:none;padding-top:0">
-        <span>© 2025 Veridian AI — veridiancloud.xyz</span>
-        <div class="footer-status">Bot en ligne</div>
-        <span>Propulsé par Llama 3 · discord.py · MySQL</span>
+        <span data-i18n="footer_copyright">© 2025 Veridian AI — veridiancloud.xyz</span>
+        <div class="footer-status" data-i18n="footer_bot_status">Bot en ligne</div>
+        <span data-i18n="footer_powered">Propulsé par Llama 3 · discord.py · MySQL</span>
       </div>
     </div>
   </footer>

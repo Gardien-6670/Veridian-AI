@@ -517,6 +517,16 @@ body::before {
 .grid-3-2 { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; margin-bottom: 16px; }
 .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px; }
 
+/* Super Admin layout */
+.superadmin-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24px; /* a bit more breathing room */
+}
+.superadmin-stack .stats-row {
+  margin-bottom: 0;
+}
+
 /* Card */
 .card {
   background: var(--bg3);

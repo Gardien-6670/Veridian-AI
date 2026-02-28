@@ -14,7 +14,7 @@
     img-src 'self' data: https://cdn.discordapp.com;
     connect-src 'self' https://api.veridiancloud.xyz https://api.veridiancloud.xyz:201;
   ">
-  <title>Veridian AI — Control Panel</title>
+  <title data-i18n="dash_title">Veridian AI — Control Panel</title>
   <link rel="icon" type="image/png" href="assets/logo veridian ai.png">
   <link rel="apple-touch-icon" href="assets/logo veridian ai.png">
   <link rel="stylesheet" href="css/dashboard.css">
@@ -27,12 +27,17 @@
 <div id="transcript-modal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.7);align-items:center;justify-content:center;backdrop-filter:blur(4px)">
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;width:min(640px,90vw);max-height:80vh;display:flex;flex-direction:column">
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--text)" id="transcript-title">Transcription</div>
-      <button data-action="close-transcript" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1">×</button>
+      <div style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:var(--text)" id="transcript-title" data-i18n="dash_transcript">Transcription</div>
+      <button data-action="close-transcript" style="background:none;border:none;color:var(--text3);cursor:pointer;line-height:1;padding:4px" aria-label="Fermer" data-i18n-aria-label="dash_close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <path d="M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
     <div id="transcript-content" style="padding:20px;overflow-y:auto;font-size:12.5px;line-height:1.7;color:var(--text2);white-space:pre-wrap;font-family:'Space Mono',monospace;flex:1"></div>
     <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
-      <button class="btn btn-ghost btn-sm" data-action="close-transcript">Fermer</button>
+      <button class="btn btn-ghost btn-sm" data-action="close-transcript" data-i18n="dash_close">Fermer</button>
     </div>
   </div>
 </div>
@@ -45,23 +50,26 @@
     Veridian <span style="color:var(--accent)">AI</span>
   </div>
   <div style="font-size:14px;color:var(--text3);font-family:'Space Mono',monospace;text-align:center">
-    Connectez-vous pour accéder au panel d'administration
+    <span data-i18n="dash_login_title">Connectez-vous pour accéder au panel d'administration</span>
   </div>
   <button id="login-discord-btn" class="discord-login-btn" type="button" style="margin-top:16px;padding:12px 32px;background:#5865F2;color:white;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:10px;transition:background 0.2s">
     <img src="assets/discord-logo.svg" alt="Discord" style="height:18px;width:auto;display:block">
-    Se connecter avec Discord
+    <span data-i18n="dash_login_btn">Se connecter avec Discord</span>
   </button>
   <div style="font-size:11px;color:var(--text3);margin-top:20px;text-align:center;max-width:300px">
-    Vous serez redirigé vers Discord pour authentifier votre compte.<br>
-    Vous ne pouvez accéder qu'aux serveurs où vous êtes administrateur.
+    <span data-i18n="dash_login_note_1">Vous serez redirigé vers Discord pour authentifier votre compte.</span><br>
+    <span data-i18n="dash_login_note_2">Vous ne pouvez accéder qu'aux serveurs où vous êtes administrateur.</span>
   </div>
 </div>
 
 <!-- ══ BETA BANNER ══════════════════════════════════════ -->
 <div class="beta-banner">
-  <span class="beta-pill">BETA</span>
-  <span>0.0.1 — Version en cours de développement · 2026</span>
-  <a href="#">Signaler un problème sur Discord →</a>
+  <span class="beta-pill" data-i18n="dash_beta">BETA</span>
+  <span data-i18n="hero_badge">0.0.1 — Version en cours de développement · 2026</span>
+  <a href="#"><span data-i18n="dash_beta_link">Signaler un problème sur Discord</span> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="vertical-align:-2px;margin-left:4px;opacity:.8">
+      <path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      <path d="M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg></a>
 </div>
 
 <div class="app" id="app">
@@ -83,7 +91,7 @@
           </svg>
         </div>
         <div class="server-info">
-          <div class="server-name">Chargement...</div>
+          <div class="server-name" data-i18n="dash_loading">Chargement...</div>
           <div class="server-plan">—</div>
         </div>
         <svg class="server-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -93,13 +101,13 @@
       <!-- Dropdown serveurs -->
       <div id="server-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:8px;right:8px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;z-index:100;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)">
         <!-- Peuplé dynamiquement par JS -->
-        <div style="padding:10px;color:var(--text3);font-size:12px;text-align:center">Chargement des serveurs…</div>
+        <div style="padding:10px;color:var(--text3);font-size:12px;text-align:center" data-i18n="dash_loading_servers">Chargement des serveurs…</div>
       </div>
     </div>
 
     <!-- Nav: Main -->
     <div class="nav-group">
-      <span class="nav-group-label">Main</span>
+      <span class="nav-group-label" data-i18n="dash_group_main">Main</span>
       <div class="nav-item active" data-page="dashboard" data-super-admin style="display:none">
         <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
           <rect x="1" y="1" width="5" height="5" rx="1.2" fill="currentColor"/>
@@ -107,13 +115,13 @@
           <rect x="1" y="8" width="5" height="5" rx="1.2" fill="currentColor" opacity=".5"/>
           <rect x="8" y="8" width="5" height="5" rx="1.2" fill="currentColor" opacity=".5"/>
         </svg>
-        Dashboard
+        <span data-i18n="dash_page_dashboard">Dashboard</span>
       </div>
       <div class="nav-item" data-page="tickets">
         <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
           <path d="M2 3.5A1.5 1.5 0 013.5 2h7A1.5 1.5 0 0112 3.5v1a1 1 0 000 2v1A1.5 1.5 0 0110.5 9h-7A1.5 1.5 0 012 7.5v-1a1 1 0 000-2v-1z" fill="currentColor" opacity=".7"/>
         </svg>
-        Tickets
+        <span data-i18n="dash_tickets">Tickets</span>
         <span class="nav-badge" data-badge="tickets">—</span>
       </div>
       <div class="nav-item" data-page="orders" data-super-admin style="display:none">
@@ -121,7 +129,7 @@
           <rect x="1.5" y="1.5" width="11" height="11" rx="1.5" fill="currentColor" opacity=".3"/>
           <path d="M4 5h6M4 7h4M4 9h2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
         </svg>
-        Orders
+        <span data-i18n="dash_orders">Orders</span>
         <span class="nav-badge yellow" data-badge="orders">—</span>
       </div>
     </div>
@@ -130,31 +138,31 @@
 
     <!-- Nav: Config -->
     <div class="nav-group">
-      <span class="nav-group-label">Config</span>
+      <span class="nav-group-label" data-i18n="dash_group_config">Config</span>
       <div class="nav-item" data-page="settings">
         <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
           <circle cx="7" cy="7" r="2" fill="currentColor"/>
           <path d="M7 1.5v1.2M7 11.3v1.2M1.5 7h1.2M11.3 7h1.2M3.1 3.1l.85.85M10.05 10.05l.85.85M3.1 10.9l.85-.85M10.05 3.95l.85-.85" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
         </svg>
-        Settings
+        <span data-i18n="dash_settings">Settings</span>
       </div>
       <div class="nav-item" data-page="kb" data-super-admin style="display:none">
         <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
           <path d="M2.5 2h6.5l2.5 2.5V12a.5.5 0 01-.5.5h-8.5A.5.5 0 012 12V2.5A.5.5 0 012.5 2z" fill="currentColor" opacity=".4"/>
           <path d="M4.5 6.5h5M4.5 8.5h3.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
         </svg>
-        Knowledge Base
+        <span data-i18n="dash_kb">Knowledge Base</span>
       </div>
     </div>
 
     <!-- Nav: Super Admin (caché pour non-super-admin) -->
     <div class="nav-group" data-super-admin style="display:none">
-      <span class="nav-group-label">Super Admin</span>
+      <span class="nav-group-label" data-i18n="dash_group_superadmin">Super Admin</span>
       <div class="nav-item" data-page="superadmin">
         <svg class="nav-icon" viewBox="0 0 14 14" fill="none">
           <path d="M7 1l1.6 3.3L12 5l-2.5 2.4.6 3.4L7 9.2 3.9 10.8l.6-3.4L2 5l3.4-.7L7 1z" fill="currentColor"/>
         </svg>
-        Super Admin
+        <span data-i18n="dash_superadmin">Super Admin</span>
       </div>
     </div>
 
@@ -163,7 +171,7 @@
       <div class="user-card">
         <img class="user-avatar-img" src="" alt="" style="width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--surface)">
         <div style="flex:1;min-width:0">
-          <div class="user-name">Chargement...</div>
+          <div class="user-name" data-i18n="dash_loading">Chargement...</div>
           <div class="user-role">—</div>
         </div>
         <svg class="logout-icon" data-action="logout" width="14" height="14" viewBox="0 0 14 14" fill="none" title="Déconnexion" style="cursor:pointer;opacity:.4;flex-shrink:0;transition:opacity .2s">
@@ -181,25 +189,25 @@
       <div style="font-family:'Space Mono',monospace;font-size:11px;display:flex;align-items:center;gap:5px">
         <span style="color:var(--text3)">veridian</span>
         <span class="breadcrumb-sep" style="color:var(--text3)">/</span>
-        <span id="breadcrumb-page" style="color:var(--text);font-weight:700">Dashboard</span>
+        <span id="breadcrumb-page" style="color:var(--text);font-weight:700" data-i18n="dash_page_dashboard">Dashboard</span>
       </div>
-      <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-left:12px" id="topbar-sub">Vue d'ensemble</div>
+      <div style="font-size:11px;color:var(--text3);font-family:'Space Mono',monospace;margin-left:12px" id="topbar-sub" data-i18n="dash_view_overview">Vue d'ensemble</div>
       <div class="topbar-right">
         <div class="status-indicator" id="bot-status-indicator">
           <div class="status-dot" id="bot-status-dot"></div>
-          <span id="bot-status-text">VÉRIFICATION…</span>
+          <span id="bot-status-text" data-i18n="dash_checking">VÉRIFICATION…</span>
         </div>
         <a href="index.html" class="topbar-btn">
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
             <path d="M1 5.5h9M5.5 1L1 5.5l4.5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Site
+          <span data-i18n="dash_site">Site</span>
         </a>
         <button class="topbar-btn" data-action="logout" type="button" title="Déconnexion">
           <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
             <path d="M1 5.5h6M7.5 2l2.5 3.5L7.5 9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Déconnexion
+          <span data-i18n="dash_logout">Déconnexion</span>
         </button>
       </div>
     </div>
@@ -211,59 +219,65 @@
 
       <div class="page-header">
         <div>
-          <div class="page-title">Dashboard</div>
-          <div class="page-sub" id="topbar-date">Chargement…</div>
+          <div class="page-title" data-i18n="dash_page_dashboard">Dashboard</div>
+          <div class="page-sub" id="topbar-date" data-i18n="dash_loading">Chargement…</div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-ghost btn-sm" data-action="refresh-dashboard" type="button">↻ Rafraîchir</button>
+          <button class="btn btn-ghost btn-sm" data-action="refresh-dashboard" type="button" style="display:inline-flex;align-items:center;gap:6px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M21 4v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span data-i18n="dash_refresh">Rafraîchir</span>
+          </button>
         </div>
       </div>
 
       <!-- Bot Status Row (visible pour tous les utilisateurs authentifiés) -->
       <div class="stats-row" id="bot-status-row">
         <div class="stat-card c-green">
-          <div class="stat-top"><div class="stat-label">Statut du bot</div><div class="stat-icon c-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"></rect><circle cx="10" cy="12" r="1.5"></circle><circle cx="14" cy="12" r="1.5"></circle><path d="M12 7V4M9 4h6"></path></svg></div></div>
+          <div class="stat-top"><div class="stat-label" data-i18n="dash_bot_status">Statut du bot</div><div class="stat-icon c-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="14" height="10" rx="2"></rect><circle cx="10" cy="12" r="1.5"></circle><circle cx="14" cy="12" r="1.5"></circle><path d="M12 7V4M9 4h6"></path></svg></div></div>
           <div class="stat-value" id="dash-bot-status">—</div>
-          <div class="stat-delta" id="dash-bot-latency">Latence: —</div>
+          <div class="stat-delta" id="dash-bot-latency" data-i18n="dash_latency">Latence: —</div>
         </div>
         <div class="stat-card c-blue">
-          <div class="stat-top"><div class="stat-label">Serveurs</div><div class="stat-icon c-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"></path></svg></div></div>
+          <div class="stat-top"><div class="stat-label" data-i18n="dash_servers">Serveurs</div><div class="stat-icon c-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"></path></svg></div></div>
           <div class="stat-value" id="dash-bot-guilds">—</div>
-          <div class="stat-delta" id="dash-bot-users">— utilisateurs</div>
+          <div class="stat-delta" id="dash-bot-users" data-i18n="dash_users_suffix">— utilisateurs</div>
         </div>
         <div class="stat-card c-yellow">
-          <div class="stat-top"><div class="stat-label">Uptime</div><div class="stat-icon c-yellow" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg></div></div>
+          <div class="stat-top"><div class="stat-label" data-i18n="dash_uptime">Uptime</div><div class="stat-icon c-yellow" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg></div></div>
           <div class="stat-value" id="dash-bot-uptime">—</div>
-          <div class="stat-delta" id="dash-bot-started">Depuis: —</div>
+          <div class="stat-delta" id="dash-bot-started" data-i18n="dash_since">Depuis: —</div>
         </div>
         <div class="stat-card c-red">
-          <div class="stat-top"><div class="stat-label">Version</div><div class="stat-icon c-red" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13v-2h-2a2 2 0 0 1-2-2 2 2 0 1 0-4 0 2 2 0 0 1-2 2H9a2 2 0 0 1-2-2 2 2 0 1 0-4 0v6a2 2 0 0 0 2 2h2a2 2 0 0 1 2 2 2 2 0 1 0 4 0 2 2 0 0 1 2-2h2a2 2 0 0 0 2-2v-2z"></path></svg></div></div>
+          <div class="stat-top"><div class="stat-label" data-i18n="dash_version">Version</div><div class="stat-icon c-red" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13v-2h-2a2 2 0 0 1-2-2 2 2 0 1 0-4 0 2 2 0 0 1-2 2H9a2 2 0 0 1-2-2 2 2 0 1 0-4 0v6a2 2 0 0 0 2 2h2a2 2 0 0 1 2 2 2 2 0 1 0 4 0 2 2 0 0 1 2-2h2a2 2 0 0 0 2-2v-2z"></path></svg></div></div>
           <div class="stat-value" id="dash-bot-version">—</div>
-          <div class="stat-delta" id="dash-bot-shards">1 shard</div>
+          <div class="stat-delta" id="dash-bot-shards" data-i18n="dash_shards">1 shard</div>
         </div>
       </div>
 
       <!-- Stats row (tickets & orders) -->
       <div class="stats-row">
         <div class="stat-card c-green">
-          <div class="stat-top"><div class="stat-label">Tickets actifs</div><div class="stat-icon c-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v4a2 2 0 0 1 0 4v4H4v-4a2 2 0 0 1 0-4z"></path><path d="M10 9v6"></path></svg></div></div>
+          <div class="stat-top"><div class="stat-label" data-i18n="dash_active_tickets">Tickets actifs</div><div class="stat-icon c-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v4a2 2 0 0 1 0 4v4H4v-4a2 2 0 0 1 0-4z"></path><path d="M10 9v6"></path></svg></div></div>
           <div class="stat-value" id="stat-tickets-actifs">—</div>
-          <div class="stat-delta up">Ouverts en ce moment</div>
+          <div class="stat-delta up" data-i18n="dash_open_now">Ouverts en ce moment</div>
         </div>
         <div class="stat-card c-blue">
-          <div class="stat-top"><div class="stat-label">Tickets ce mois</div><div class="stat-icon c-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M7 16V9"></path><path d="M12 20V7"></path><path d="M17 20v-5"></path></svg></div></div>
+          <div class="stat-top"><div class="stat-label" data-i18n="dash_tickets_month">Tickets ce mois</div><div class="stat-icon c-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><path d="M7 16V9"></path><path d="M12 20V7"></path><path d="M17 20v-5"></path></svg></div></div>
           <div class="stat-value" id="stat-tickets-mois">—</div>
-          <div class="stat-delta up">Ce mois</div>
+          <div class="stat-delta up" data-i18n="dash_this_month">Ce mois</div>
         </div>
         <div class="stat-card c-yellow">
-          <div class="stat-top"><div class="stat-label">Commandes en attente</div><div class="stat-icon c-yellow" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12M6 20h12"></path><path d="M6 4l12 8-12 8"></path><path d="M6 4l6 6 6-6"></path></svg></div></div>
+          <div class="stat-top"><div class="stat-label" data-i18n="dash_pending_orders">Commandes en attente</div><div class="stat-icon c-yellow" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12M6 20h12"></path><path d="M6 4l12 8-12 8"></path><path d="M6 4l6 6 6-6"></path></svg></div></div>
           <div class="stat-value" id="stat-orders-attente">—</div>
-          <div class="stat-delta">À valider manuellement</div>
+          <div class="stat-delta" data-i18n="dash_to_validate">À valider manuellement</div>
         </div>
         <div class="stat-card c-red">
-          <div class="stat-top"><div class="stat-label">Langues détectées</div><div class="stat-icon c-red" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M8 3.5c1.7 2.6 1.7 14.4 0 17M16 3.5c-1.7 2.6-1.7 14.4 0 17"></path></svg></div></div>
+          <div class="stat-top"><div class="stat-label" data-i18n="dash_languages_detected">Langues détectées</div><div class="stat-icon c-red" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3c2.5 3 2.5 15 0 18M8 3.5c1.7 2.6 1.7 14.4 0 17M16 3.5c-1.7 2.6-1.7 14.4 0 17"></path></svg></div></div>
           <div class="stat-value" id="stat-languages-count">0</div>
-          <div class="stat-delta">Ce mois — 100+ supportées</div>
+          <div class="stat-delta" data-i18n="dash_languages_note">Ce mois — 100+ supportées</div>
         </div>
       </div>
 
@@ -271,8 +285,8 @@
       <div class="grid-3-2">
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Tickets — 7 derniers jours</div>
-            <div class="card-meta">TICKETS / JOUR</div>
+            <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_tickets_last_7">Tickets — 7 derniers jours</span></div>
+            <div class="card-meta" data-i18n="dash_tickets_per_day">TICKETS / JOUR</div>
           </div>
           <div class="card-body">
             <div id="bar-chart" class="bar-chart"></div>
@@ -280,14 +294,14 @@
         </div>
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Langues</div>
-            <div class="card-meta">CE MOIS</div>
+            <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_languages">Langues</span></div>
+            <div class="card-meta" data-i18n="dash_this_month_upper">CE MOIS</div>
           </div>
           <div class="card-body">
             <div id="lang-stats">
               <!-- Peuplé par renderLanguageStats() -->
               <div class="progress-item">
-                <div class="progress-header"><div class="progress-label">🇬🇧 Anglais</div><div class="progress-pct">—</div></div>
+                <div class="progress-header"><div class="progress-label">Anglais</div><div class="progress-pct">—</div></div>
                 <div class="progress-track"><div class="progress-fill" data-width="0%" style="width:0"></div></div>
               </div>
             </div>
@@ -298,11 +312,11 @@
       <!-- Activité récente -->
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><div class="card-dot"></div>Activité récente</div>
-          <button class="btn btn-ghost btn-sm btn-xs" data-nav="tickets" type="button">Tout voir</button>
+          <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_recent_activity">Activité récente</span></div>
+          <button class="btn btn-ghost btn-sm btn-xs" data-nav="tickets" type="button" data-i18n="dash_view_all">Tout voir</button>
         </div>
         <div class="card-body" id="activity-recent">
-          <div style="color:var(--text3);font-size:12px;text-align:center;padding:20px">Chargement…</div>
+          <div style="color:var(--text3);font-size:12px;text-align:center;padding:20px" data-i18n="dash_loading">Chargement…</div>
         </div>
       </div>
     </div>
@@ -314,21 +328,27 @@
 
       <div class="page-header">
         <div>
-          <div class="page-title">Tickets</div>
-          <div class="page-sub">Support — liste complète</div>
+          <div class="page-title" data-i18n="dash_tickets">Tickets</div>
+          <div class="page-sub" data-i18n="dash_tickets_sub">Support — liste complète</div>
         </div>
         <div class="page-actions">
-          <input id="ticket-search" class="form-input" type="text" placeholder="Rechercher par ID, user, statut…" style="width:220px;padding:6px 10px;font-size:12px">
-          <button class="btn btn-ghost btn-sm" data-action="refresh-tickets" type="button">↻ Rafraîchir</button>
+          <input id="ticket-search" class="form-input" type="text" placeholder="Rechercher par ID, user, statut…" data-i18n-placeholder="dash_search_ticket" style="width:220px;padding:6px 10px;font-size:12px">
+          <button class="btn btn-ghost btn-sm" data-action="refresh-tickets" type="button" style="display:inline-flex;align-items:center;gap:6px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M21 4v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span data-i18n="dash_refresh">Rafraîchir</span>
+          </button>
         </div>
       </div>
 
       <!-- Filtres statut -->
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm active" data-ticket-filter="all">Tous</button>
-        <button class="btn btn-ghost btn-sm" data-ticket-filter="open">Ouverts</button>
-        <button class="btn btn-ghost btn-sm" data-ticket-filter="in_progress">En cours</button>
-        <button class="btn btn-ghost btn-sm" data-ticket-filter="closed">Fermés</button>
+        <button class="btn btn-ghost btn-sm active" data-ticket-filter="all" data-i18n="dash_filter_all">Tous</button>
+        <button class="btn btn-ghost btn-sm" data-ticket-filter="open" data-i18n="dash_filter_open">Ouverts</button>
+        <button class="btn btn-ghost btn-sm" data-ticket-filter="in_progress" data-i18n="dash_filter_in_progress">En cours</button>
+        <button class="btn btn-ghost btn-sm" data-ticket-filter="closed" data-i18n="dash_filter_closed">Fermés</button>
       </div>
 
       <div class="card">
@@ -337,16 +357,16 @@
             <thead>
               <tr>
                 <th>ID</th>
-                <th>Utilisateur</th>
-                <th>Statut</th>
-                <th>Langue</th>
-                <th>Assigné à</th>
-                <th>Ouvert le</th>
-                <th>Actions</th>
+                <th data-i18n="dash_user">Utilisateur</th>
+                <th data-i18n="dash_status">Statut</th>
+                <th data-i18n="dash_language">Langue</th>
+                <th data-i18n="dash_assigned_to">Assigné à</th>
+                <th data-i18n="dash_opened_on">Ouvert le</th>
+                <th data-i18n="dash_actions">Actions</th>
               </tr>
             </thead>
             <tbody id="tickets-tbody">
-              <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Sélectionnez un serveur pour voir les tickets</td></tr>
+              <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px" data-i18n="dash_select_server_tickets">Sélectionnez un serveur pour voir les tickets</td></tr>
             </tbody>
           </table>
         </div>
@@ -360,28 +380,39 @@
 
       <div class="page-header">
         <div>
-          <div class="page-title">Orders</div>
-          <div class="page-sub">Commandes en attente de validation manuelle</div>
+          <div class="page-title" data-i18n="dash_orders">Orders</div>
+          <div class="page-sub" data-i18n="dash_orders_sub">Commandes en attente de validation manuelle</div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-ghost btn-sm" data-action="refresh-orders" type="button">↻ Rafraîchir</button>
+          <button class="btn btn-ghost btn-sm" data-action="refresh-orders" type="button" style="display:inline-flex;align-items:center;gap:6px">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M21 4v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span data-i18n="dash_refresh">Rafraîchir</span>
+          </button>
         </div>
       </div>
 
       <div class="grid-2">
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>En attente</div>
-            <button class="btn btn-ghost btn-sm btn-xs" data-action="refresh-orders" type="button">↻</button>
+            <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_pending">En attente</span></div>
+            <button class="btn btn-ghost btn-sm btn-xs" data-action="refresh-orders" type="button" aria-label="Rafraîchir" style="display:inline-flex;align-items:center;justify-content:center">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M21 4v6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </div>
           <div class="card-body" id="orders-list">
-            <div style="color:var(--text3);font-size:13px;text-align:center;padding:24px">Chargement…</div>
+            <div style="color:var(--text3);font-size:13px;text-align:center;padding:24px" data-i18n="dash_loading">Chargement…</div>
           </div>
         </div>
 
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Légende</div>
+            <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_legend">Légende</span></div>
           </div>
           <div class="card-body">
             <div style="display:flex;flex-direction:column;gap:10px">
@@ -393,8 +424,8 @@
                   </svg>
                 </div>
                 <div>
-                  <div style="font-size:12.5px;font-weight:600;color:var(--accent)">Payé</div>
-                  <div style="font-size:11px;color:var(--text3)">Active le plan, notifie l'utilisateur en DM</div>
+                  <div style="font-size:12.5px;font-weight:600;color:var(--accent)" data-i18n="dash_paid">Payé</div>
+                  <div style="font-size:11px;color:var(--text3)" data-i18n="dash_order_paid_desc">Active le plan, notifie l'utilisateur en DM</div>
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--surface);border-radius:8px;border:1px solid var(--border2)">
@@ -406,8 +437,8 @@
                   </svg>
                 </div>
                 <div>
-                  <div style="font-size:12.5px;font-weight:600;color:var(--yellow)">Montant incomplet</div>
-                  <div style="font-size:11px;color:var(--text3)">DM à l'utilisateur pour envoyer le reste</div>
+                  <div style="font-size:12.5px;font-weight:600;color:var(--yellow)" data-i18n="dash_amount_incomplete">Montant incomplet</div>
+                  <div style="font-size:11px;color:var(--text3)" data-i18n="dash_dm_send_rest">DM à l'utilisateur pour envoyer le reste</div>
                 </div>
               </div>
               <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--surface);border-radius:8px;border:1px solid var(--border2)">
@@ -418,17 +449,17 @@
                   </svg>
                 </div>
                 <div>
-                  <div style="font-size:12.5px;font-weight:600;color:var(--red)">Rejeté</div>
-                  <div style="font-size:11px;color:var(--text3)">Annule la commande, notifie l'utilisateur</div>
+                  <div style="font-size:12.5px;font-weight:600;color:var(--red)" data-i18n="dash_rejected">Rejeté</div>
+                  <div style="font-size:11px;color:var(--text3)" data-i18n="dash_order_rejected_desc">Annule la commande, notifie l'utilisateur</div>
                 </div>
               </div>
             </div>
             <div style="margin-top:16px;padding:12px;background:var(--accent-dim2);border:1px solid rgba(45,255,143,0.1);border-radius:8px">
               <div style="font-size:10px;font-family:'Space Mono',monospace;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:6px">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
-                RAPPEL
+                <span data-i18n="dash_reminder">RAPPEL</span>
               </div>
-              <div style="font-size:11.5px;color:var(--text2);line-height:1.5">Chaque action envoie automatiquement un DM Discord à l'utilisateur via le bot.</div>
+              <div style="font-size:11.5px;color:var(--text2);line-height:1.5" data-i18n="dash_orders_reminder">Chaque action envoie automatiquement un DM Discord à l'utilisateur via le bot.</div>
             </div>
           </div>
         </div>
@@ -437,16 +468,16 @@
       <!-- Historique -->
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><div class="card-dot"></div>Historique récent</div>
-          <div class="card-meta">30 DERNIERS JOURS</div>
+          <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_recent_history">Historique récent</span></div>
+          <div class="card-meta" data-i18n="dash_last_30_days">30 DERNIERS JOURS</div>
         </div>
         <div class="card-body no-pad">
           <table class="data-table" id="orders-history">
             <thead>
-              <tr><th>Order ID</th><th>Utilisateur</th><th>Méthode</th><th>Plan</th><th>Montant</th><th>Statut</th><th>Date</th></tr>
+              <tr><th data-i18n="dash_order_id">Order ID</th><th data-i18n="dash_user">Utilisateur</th><th data-i18n="dash_method">Méthode</th><th data-i18n="dash_plan">Plan</th><th data-i18n="dash_amount">Montant</th><th data-i18n="dash_status">Statut</th><th data-i18n="dash_date">Date</th></tr>
             </thead>
             <tbody>
-              <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">Chargement de l'historique…</td></tr>
+              <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px" data-i18n="dash_loading_history">Chargement de l'historique…</td></tr>
             </tbody>
           </table>
         </div>
@@ -460,11 +491,11 @@
 
       <div class="page-header">
         <div>
-          <div class="page-title">Settings</div>
-          <div class="page-sub">Configuration du bot pour ce serveur</div>
+          <div class="page-title" data-i18n="dash_settings">Settings</div>
+          <div class="page-sub" data-i18n="dash_settings_sub">Configuration du bot pour ce serveur</div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-primary btn-sm" id="settings-save-btn">Sauvegarder</button>
+          <button class="btn btn-primary btn-sm" id="settings-save-btn" data-i18n="dash_save">Sauvegarder</button>
         </div>
       </div>
 
@@ -473,38 +504,38 @@
         <!-- Bot Config -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Configuration du bot</div>
+            <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_bot_config">Configuration du bot</span></div>
           </div>
           <div class="card-body">
             <div class="form-group">
-              <label class="form-label">Channel support public IA</label>
-              <input class="form-input" id="settings-support-channel" type="text" placeholder="#nom-du-channel ou ID">
-              <div style="font-size:10px;color:var(--text3);margin-top:4px">ID numérique ou #nom du channel Discord</div>
+              <label class="form-label" data-i18n="dash_label_public_support_channel">Channel support public IA</label>
+              <input class="form-input" id="settings-support-channel" type="text" placeholder="#nom-du-channel ou ID" data-i18n-placeholder="dash_placeholder_channel_or_id">
+              <div style="font-size:10px;color:var(--text3);margin-top:4px" data-i18n="dash_help_channel_id">ID numérique ou #nom du channel Discord</div>
             </div>
             <div class="form-group">
-              <label class="form-label">Catégorie tickets</label>
-              <input class="form-input" id="settings-ticket-category" type="text" placeholder="ID de la catégorie">
+              <label class="form-label" data-i18n="dash_label_ticket_category">Catégorie tickets</label>
+              <input class="form-input" id="settings-ticket-category" type="text" placeholder="ID de la catégorie" data-i18n-placeholder="dash_placeholder_category_id">
             </div>
             <div class="form-group">
-              <label class="form-label">Rôle Staff</label>
+              <label class="form-label" data-i18n="dash_label_staff_role">Rôle Staff</label>
               <input class="form-input" id="settings-staff-role" type="text" placeholder="@NomDuRole ou ID">
             </div>
             <div class="form-group">
-              <label class="form-label">Channel de logs</label>
-              <input class="form-input" id="settings-log-channel" type="text" placeholder="#logs-bot ou ID">
+              <label class="form-label" data-i18n="dash_label_logs_channel">Channel de logs</label>
+              <input class="form-input" id="settings-log-channel" type="text" placeholder="#logs-bot ou ID" data-i18n-placeholder="dash_placeholder_logs_or_id">
             </div>
             <div class="form-group">
-              <label class="form-label">Langue par défaut du staff</label>
+              <label class="form-label" data-i18n="dash_label_default_lang">Langue par défaut du staff</label>
               <select class="form-select" id="settings-default-lang">
-                <option value="en">🇬🇧 Anglais (en)</option>
-                <option value="fr">🇫🇷 Français (fr)</option>
-                <option value="de">🇩🇪 Allemand (de)</option>
-                <option value="es">🇪🇸 Espagnol (es)</option>
-                <option value="it">🇮🇹 Italien (it)</option>
-                <option value="pt">🇵🇹 Portugais (pt)</option>
-                <option value="ru">🇷🇺 Russe (ru)</option>
-                <option value="ja">🇯🇵 Japonais (ja)</option>
-                <option value="zh">🇨🇳 Chinois (zh)</option>
+                <option value="en">Anglais (en)</option>
+                <option value="fr">Français (fr)</option>
+                <option value="de">Allemand (de)</option>
+                <option value="es">Espagnol (es)</option>
+                <option value="it">Italien (it)</option>
+                <option value="pt">Portugais (pt)</option>
+                <option value="ru">Russe (ru)</option>
+                <option value="ja">Japonais (ja)</option>
+                <option value="zh">Chinois (zh)</option>
               </select>
             </div>
           </div>
@@ -513,51 +544,57 @@
         <!-- Feature toggles -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Fonctionnalités</div>
+            <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_features">Fonctionnalités</span></div>
           </div>
           <div class="card-body">
             <div class="toggle-row">
               <div class="toggle-info">
-                <div class="toggle-name">Traduction automatique</div>
-                <div class="toggle-desc">Traduit les messages entre staff et utilisateurs</div>
+                <div class="toggle-name" data-i18n="dash_toggle_auto_translate">Traduction automatique</div>
+                <div class="toggle-desc" data-i18n="dash_desc_auto_translate">Traduit les messages entre staff et utilisateurs</div>
               </div>
               <div class="toggle-switch" id="toggle-auto-translate" data-setting-key="auto_translate"></div>
             </div>
             <div class="toggle-row">
               <div class="toggle-info">
-                <div class="toggle-name">Support public IA</div>
-                <div class="toggle-desc">Réponses automatiques dans le channel désigné</div>
+                <div class="toggle-name" data-i18n="dash_toggle_public_support">Support public IA</div>
+                <div class="toggle-desc" data-i18n="dash_desc_public_support">Réponses automatiques dans le channel désigné</div>
               </div>
               <div class="toggle-switch" id="toggle-public-support" data-setting-key="public_support"></div>
             </div>
             <div class="toggle-row">
               <div class="toggle-info">
-                <div class="toggle-name">Transcription IA</div>
-                <div class="toggle-desc">Résumé automatique à la fermeture des tickets</div>
+                <div class="toggle-name" data-i18n="dash_toggle_auto_transcript">Transcription IA</div>
+                <div class="toggle-desc" data-i18n="dash_desc_auto_transcript">Résumé automatique à la fermeture des tickets</div>
               </div>
               <div class="toggle-switch" id="toggle-auto-transcript" data-setting-key="auto_transcript"></div>
             </div>
             <div class="toggle-row">
               <div class="toggle-info">
-                <div class="toggle-name">Modération IA</div>
-                <div class="toggle-desc">Détection automatique de contenu inapproprié</div>
+                <div class="toggle-name" data-i18n="dash_toggle_ai_moderation">Modération IA</div>
+                <div class="toggle-desc" data-i18n="dash_desc_ai_moderation">Détection automatique de contenu inapproprié</div>
               </div>
               <div class="toggle-switch" id="toggle-ai-moderation" data-setting-key="ai_moderation"></div>
             </div>
             <div class="toggle-row">
               <div class="toggle-info">
-                <div class="toggle-name">Suggestions staff IA</div>
-                <div class="toggle-desc">Suggestions de réponses pour les agents<br><span style="font-size:10px;color:var(--accent);font-family:'Space Mono',monospace">PRO UNIQUEMENT</span></div>
+                <div class="toggle-name" data-i18n="dash_toggle_staff_suggestions">Suggestions staff IA</div>
+                <div class="toggle-desc" data-i18n="dash_desc_staff_suggestions">Suggestions de réponses pour les agents<br><span style="font-size:10px;color:var(--accent);font-family:'Space Mono',monospace" data-i18n="dash_pro_only">PRO UNIQUEMENT</span></div>
               </div>
               <div class="toggle-switch" id="toggle-staff-suggestions" data-setting-key="staff_suggestions" style="opacity:0.4;pointer-events:none"></div>
             </div>
 
             <div style="margin-top:16px;padding:12px;background:var(--blue-dim);border:1px solid rgba(77,166,255,0.15);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:10px">
               <div>
-                <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--blue);margin-bottom:3px">PLAN ACTUEL</div>
+                <div style="font-size:11px;font-family:'Space Mono',monospace;color:var(--blue);margin-bottom:3px" data-i18n="dash_current_plan">PLAN ACTUEL</div>
                 <div style="font-size:13px;font-weight:700;color:var(--text)"><span id="settings-current-plan">—</span> <span id="settings-current-plan-price" style="color:var(--text3);font-weight:400"></span></div>
               </div>
-              <button class="btn btn-ghost btn-sm" id="settings-upgrade-btn" style="font-size:11px" data-nav="orders" type="button">Upgrader →</button>
+              <button class="btn btn-ghost btn-sm" id="settings-upgrade-btn" style="font-size:11px;display:inline-flex;align-items:center;gap:6px" data-nav="orders" type="button">
+                <span data-i18n="dash_upgrade">Upgrader</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="opacity:.8">
+                  <path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <path d="M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -571,11 +608,11 @@
 
       <div class="page-header">
         <div>
-          <div class="page-title">Knowledge Base</div>
-          <div class="page-sub">Base de connaissances pour l'IA de support</div>
+          <div class="page-title" data-i18n="dash_kb">Knowledge Base</div>
+          <div class="page-sub" data-i18n="dash_kb_sub">Base de connaissances pour l'IA de support</div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-primary btn-sm" id="kb-add-btn">+ Ajouter une entrée</button>
+          <button class="btn btn-primary btn-sm" id="kb-add-btn" data-i18n="dash_kb_add">+ Ajouter une entrée</button>
         </div>
       </div>
 
@@ -584,20 +621,20 @@
         <input type="hidden" id="kb-form-id">
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div><span id="kb-form-title">Nouvelle entrée</span></div>
+            <div class="card-title"><div class="card-dot"></div><span id="kb-form-title" data-i18n="dash_kb_new">Nouvelle entrée</span></div>
           </div>
           <div class="card-body">
             <div class="form-group">
-              <label class="form-label">Question</label>
+              <label class="form-label" data-i18n="dash_kb_question">Question</label>
               <input class="form-input" id="kb-form-q" type="text" placeholder="Ex: Comment rejoindre le serveur Minecraft ?">
             </div>
             <div class="form-group">
-              <label class="form-label">Réponse</label>
+              <label class="form-label" data-i18n="dash_kb_answer">Réponse</label>
               <textarea class="form-input" id="kb-form-a" rows="3" placeholder="Ex: Connecte-toi avec l'IP play.monserveur.com…" style="resize:vertical;font-family:'DM Sans',sans-serif"></textarea>
             </div>
             <div style="display:flex;gap:8px">
-              <button class="btn btn-primary btn-sm" id="kb-save-btn">Sauvegarder</button>
-              <button class="btn btn-ghost btn-sm" data-action="kb-cancel" type="button">Annuler</button>
+              <button class="btn btn-primary btn-sm" id="kb-save-btn" data-i18n="dash_save">Sauvegarder</button>
+              <button class="btn btn-ghost btn-sm" data-action="kb-cancel" type="button" data-i18n="dash_cancel">Annuler</button>
             </div>
           </div>
         </div>
@@ -606,16 +643,16 @@
       <!-- KB entries -->
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><div class="card-dot"></div>Entrées actuelles</div>
+          <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_kb_entries">Entrées actuelles</span></div>
           <div class="card-meta" data-kb-counter>0 / 50 ENTRÉES</div>
         </div>
         <div class="card-body">
           <div id="kb-entries">
-            <div style="color:var(--text3);font-size:13px;text-align:center;padding:24px">Sélectionnez un serveur pour voir la base de connaissances</div>
+            <div style="color:var(--text3);font-size:13px;text-align:center;padding:24px" data-i18n="dash_select_server_kb">Sélectionnez un serveur pour voir la base de connaissances</div>
           </div>
           <div style="margin-top:16px;padding:12px;background:var(--surface);border-radius:8px;border:1px solid var(--border)">
             <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-              <span style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text3)">CAPACITÉ UTILISÉE</span>
+              <span style="font-size:11px;font-family:'Space Mono',monospace;color:var(--text3)" data-i18n="dash_capacity_used">CAPACITÉ UTILISÉE</span>
               <span style="font-size:11px;font-family:'Space Mono',monospace;color:var(--accent)" data-kb-counter>0 / 50</span>
             </div>
             <div class="progress-track">
@@ -627,79 +664,79 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════
-         PAGE — SUPER ADMIN (Bot Owner only)
+         <span data-i18n="dash_superadmin_note">PAGE — SUPER ADMIN (Bot Owner only)</span>
     ══════════════════════════════════════════════════════════ -->
     <div class="page-content" id="page-superadmin">
 
       <div class="page-header">
         <div>
-          <div class="page-title">Super Admin</div>
-          <div class="page-sub">Panel global — Bot Owner uniquement</div>
+          <div class="page-title" data-i18n="dash_superadmin">Super Admin</div>
+          <div class="page-sub" data-i18n="dash_superadmin_sub">Panel global — Bot Owner uniquement</div>
         </div>
         <div class="page-actions">
-          <button class="btn btn-ghost btn-sm" data-action="refresh-superadmin" type="button" style="display:inline-flex;align-items:center;gap:6px">
+          <button class="btn btn-ghost btn-sm" data-action="refresh-superadmin" type="button" style="display:inline-flex;align-items:center;gap:6px" aria-label="Rafraîchir">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M20 12a8 8 0 10-2.34 5.66" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
               <path d="M20 4v8h-8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
             </svg>
-            <span>Rafraîchir</span>
+            <span data-i18n="dash_refresh">Rafraîchir</span>
           </button>
         </div>
       </div>
 
-      <div style="display:flex;flex-direction:column;gap:20px">
+      <div class="superadmin-stack">
         <!-- Stats globales -->
         <div class="stats-row" style="margin-bottom:0">
           <div class="stat-card c-green">
-            <div class="stat-top"><div class="stat-label">Serveurs</div><div class="stat-icon c-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"></path></svg></div></div>
+            <div class="stat-top"><div class="stat-label" data-i18n="dash_servers">Serveurs</div><div class="stat-icon c-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1h-4v-5H9v5H5a1 1 0 0 1-1-1z"></path></svg></div></div>
             <div class="stat-value" id="admin-stat-servers">—</div>
-            <div class="stat-delta">Veridian AI installé</div>
+            <div class="stat-delta" data-i18n="dash_installed_note">Veridian AI installé</div>
           </div>
           <div class="stat-card c-blue">
-            <div class="stat-top"><div class="stat-label">Utilisateurs</div><div class="stat-icon c-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"></circle><circle cx="15" cy="11" r="3"></circle><path d="M4 20c0-2.5 2.5-4.5 5-4.5"></path><path d="M10 18c0-2 2.5-3 5-3"></path></svg></div></div>
+            <div class="stat-top"><div class="stat-label" data-i18n="dash_users">Utilisateurs</div><div class="stat-icon c-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3"></circle><circle cx="15" cy="11" r="3"></circle><path d="M4 20c0-2.5 2.5-4.5 5-4.5"></path><path d="M10 18c0-2 2.5-3 5-3"></path></svg></div></div>
             <div class="stat-value" id="admin-stat-users">—</div>
-            <div class="stat-delta">Total en DB</div>
+            <div class="stat-delta" data-i18n="dash_total_db">Total en DB</div>
           </div>
           <div class="stat-card c-yellow">
-            <div class="stat-top"><div class="stat-label">Tickets aujourd'hui</div><div class="stat-icon c-yellow" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v4a2 2 0 0 1 0 4v4H4v-4a2 2 0 0 1 0-4z"></path><path d="M10 9v6"></path></svg></div></div>
+            <div class="stat-top"><div class="stat-label" data-i18n="dash_tickets_today">Tickets aujourd'hui</div><div class="stat-icon c-yellow" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v4a2 2 0 0 1 0 4v4H4v-4a2 2 0 0 1 0-4z"></path><path d="M10 9v6"></path></svg></div></div>
             <div class="stat-value" id="admin-stat-tickets">—</div>
-            <div class="stat-delta">Tous serveurs</div>
+            <div class="stat-delta" data-i18n="dash_all_servers">Tous serveurs</div>
           </div>
           <div class="stat-card c-red">
-            <div class="stat-top"><div class="stat-label">Revenus ce mois</div><div class="stat-icon c-red" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="5" ry="2"></ellipse><path d="M7 6v6c0 1.1 2.2 2 5 2s5-.9 5-2V6"></path><path d="M7 10c0 1.1 2.2 2 5 2s5-.9 5-2"></path></svg></div></div>
+            <div class="stat-top"><div class="stat-label" data-i18n="dash_revenue_month">Revenus ce mois</div><div class="stat-icon c-red" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="5" ry="2"></ellipse><path d="M7 6v6c0 1.1 2.2 2 5 2s5-.9 5-2V6"></path><path d="M7 10c0 1.1 2.2 2 5 2s5-.9 5-2"></path></svg></div></div>
             <div class="stat-value" id="admin-stat-revenue">—</div>
-            <div class="stat-delta">PayPal + OxaPay + GC</div>
+            <div class="stat-delta" data-i18n="dash_revenue_sources">PayPal + OxaPay + GC</div>
           </div>
         </div>
 
         <!-- Bot status row -->
         <div class="stats-row" style="margin-bottom:0">
           <div class="stat-card c-green">
-            <div class="stat-top"><div class="stat-label">Uptime</div><div class="stat-icon c-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg></div></div>
+            <div class="stat-top"><div class="stat-label" data-i18n="dash_uptime">Uptime</div><div class="stat-icon c-green" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg></div></div>
             <div class="stat-value" id="admin-bot-uptime">—</div>
-            <div class="stat-delta" id="admin-bot-started">Depuis le dernier redémarrage</div>
+            <div class="stat-delta" id="admin-bot-started" data-i18n="dash_since_restart">Depuis le dernier redémarrage</div>
           </div>
           <div class="stat-card c-blue">
-            <div class="stat-top"><div class="stat-label">Version</div><div class="stat-icon c-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13v-2h-2a2 2 0 0 1-2-2 2 2 0 1 0-4 0 2 2 0 0 1-2 2H9a2 2 0 0 1-2-2 2 2 0 1 0-4 0v6a2 2 0 0 0 2 2h2a2 2 0 0 1 2 2 2 2 0 1 0 4 0 2 2 0 0 1 2-2h2a2 2 0 0 0 2-2v-2z"></path></svg></div></div>
+            <div class="stat-top"><div class="stat-label" data-i18n="dash_version">Version</div><div class="stat-icon c-blue" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13v-2h-2a2 2 0 0 1-2-2 2 2 0 1 0-4 0 2 2 0 0 1-2 2H9a2 2 0 0 1-2-2 2 2 0 1 0-4 0v6a2 2 0 0 0 2 2h2a2 2 0 0 1 2 2 2 2 0 1 0 4 0 2 2 0 0 1 2-2h2a2 2 0 0 0 2-2v-2z"></path></svg></div></div>
             <div class="stat-value" id="admin-bot-version">—</div>
-            <div class="stat-delta">Build déployé</div>
+            <div class="stat-delta" data-i18n="dash_build_deployed">Build déployé</div>
           </div>
           <div class="stat-card c-yellow">
-            <div class="stat-top"><div class="stat-label">Latence</div><div class="stat-icon c-yellow" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6a11 11 0 0 1 14 0"></path><path d="M8 9.5a7 7 0 0 1 8 0"></path><circle cx="12" cy="13" r="2"></circle><path d="M12 15v5"></path></svg></div></div>
+            <div class="stat-top"><div class="stat-label" data-i18n="dash_latency_label">Latence</div><div class="stat-icon c-yellow" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6a11 11 0 0 1 14 0"></path><path d="M8 9.5a7 7 0 0 1 8 0"></path><circle cx="12" cy="13" r="2"></circle><path d="M12 15v5"></path></svg></div></div>
             <div class="stat-value" id="admin-bot-latency">—</div>
-            <div class="stat-delta" id="admin-bot-shards">1 shard</div>
+            <div class="stat-delta" id="admin-bot-shards" data-i18n="dash_shards">1 shard</div>
           </div>
           <div class="stat-card c-red">
-            <div class="stat-top"><div class="stat-label">Channels</div><div class="stat-icon c-red" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v8H7l-3 3z"></path></svg></div></div>
+            <div class="stat-top"><div class="stat-label" data-i18n="dash_channels">Channels</div><div class="stat-icon c-red" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v8H7l-3 3z"></path></svg></div></div>
             <div class="stat-value" id="admin-bot-channels">—</div>
-            <div class="stat-delta">Channels accessibles</div>
+            <div class="stat-delta" data-i18n="dash_channels_accessible">Channels accessibles</div>
           </div>
         </div>
 
         <!-- Commandes en attente (toutes) -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Toutes les commandes en attente</div>
+            <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_all_pending_orders">Toutes les commandes en attente</span></div>
             <button class="btn btn-ghost btn-sm btn-xs" data-action="refresh-superadmin" type="button" style="display:inline-flex;align-items:center;justify-content:center">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M20 12a8 8 0 10-2.34 5.66" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -708,30 +745,30 @@
             </button>
           </div>
           <div class="card-body" id="admin-orders-list">
-            <div style="color:var(--text3);font-size:13px;text-align:center;padding:24px">Chargement…</div>
+            <div style="color:var(--text3);font-size:13px;text-align:center;padding:24px" data-i18n="dash_loading">Chargement…</div>
           </div>
         </div>
 
         <!-- Gestion abonnements -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Activer / Révoquer un abonnement</div>
+            <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_manage_subscription">Activer / Révoquer un abonnement</span></div>
           </div>
           <div class="card-body">
             <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
               <div class="form-group" style="flex:1;min-width:160px;margin-bottom:0">
-                <label class="form-label">Guild ID</label>
+                <label class="form-label" data-i18n="dash_guild_id">Guild ID</label>
                 <input class="form-input" id="admin-guild-id" type="text" placeholder="Ex: 123456789012345678">
               </div>
               <div class="form-group" style="flex:1;min-width:120px;margin-bottom:0">
-                <label class="form-label">Plan</label>
+                <label class="form-label" data-i18n="dash_plan">Plan</label>
                 <select class="form-select" id="admin-plan">
                   <option value="premium">Premium — 2€</option>
                   <option value="pro">Pro — 5€</option>
                 </select>
               </div>
-              <button class="btn btn-primary btn-sm" data-action="admin-activate-sub" type="button">Activer</button>
-              <button class="btn btn-red btn-sm" data-action="admin-revoke-sub" type="button">Révoquer</button>
+              <button class="btn btn-primary btn-sm" data-action="admin-activate-sub" type="button" data-i18n="dash_activate">Activer</button>
+              <button class="btn btn-red btn-sm" data-action="admin-revoke-sub" type="button" data-i18n="dash_revoke">Révoquer</button>
             </div>
           </div>
         </div>
@@ -739,13 +776,13 @@
         <!-- ══ GROQ API — Clés & Fallback (Super Admin uniquement) ══ -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title"><div class="card-dot"></div>Groq API — Clés &amp; Fallback Status</div>
-            <div class="card-meta">4 CLÉS · SUPER ADMIN</div>
+            <div class="card-title"><div class="card-dot"></div><span data-i18n="dash_groq_title">Groq API — Clés &amp; Fallback Status</span></div>
+            <div class="card-meta" data-i18n="dash_groq_meta">4 CLÉS · SUPER ADMIN</div>
           </div>
           <div class="card-body">
 
           <!-- Avertissement sécurité -->
-          <div style="margin-bottom:16px;padding:10px 14px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.25);border-radius:8px;display:flex;align-items:center;gap:10px">
+          <div style="margin-bottom:16px;padding:10px 14px;background:rgba(255,80,80,0.08);border:1px solid rgba(255,80,80,0.25);border-radius:8px;display:flex;align-items:center;gap:10px" data-i18n-skip>
             <span aria-hidden="true">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="4" y="11" width="16" height="9" rx="2"></rect>
@@ -753,8 +790,8 @@
               </svg>
             </span>
             <div style="font-size:11.5px;color:var(--text2);line-height:1.5">
-              Les clés Groq sont des secrets serveur stockés dans le fichier <code style="font-family:'Space Mono',monospace;color:var(--accent);font-size:10.5px">.env</code>.
-              Elles ne sont <strong>jamais exposées</strong> côté client. Ce panneau affiche uniquement leur statut d'utilisation.
+              <span data-i18n="dash_groq_security_1">Les clés Groq sont des secrets serveur stockés dans le fichier <code style="font-family:'Space Mono',monospace;color:var(--accent);font-size:10.5px">.env</code>.</span>
+              <span data-i18n="dash_groq_security_2">Elles ne sont <strong>jamais exposées</strong> côté client. Ce panneau affiche uniquement leur statut d'utilisation.</span>
             </div>
           </div>
 
@@ -762,8 +799,8 @@
           <div class="key-row">
             <div class="key-num">KEY 1</div>
             <div class="key-details">
-              <div class="key-name">Clé principale — Llama 3.3 70B &amp; Llama 4 Scout</div>
-              <div style="font-size:10px;color:var(--text3);margin-top:2px">Usage : réponses support IA, traduction temps réel, résumés tickets</div>
+              <div class="key-name" data-i18n="dash_groq_key1">Clé principale — Llama 3.3 70B &amp; Llama 4 Scout</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:2px" data-i18n="dash_groq_key1_usage">Usage : réponses support IA, traduction temps réel, résumés tickets</div>
               <div class="key-track"><div class="key-fill low" data-width="23%" style="width:0"></div></div>
             </div>
             <div class="key-pct">23%</div>
@@ -773,8 +810,8 @@
           <div class="key-row">
             <div class="key-num">KEY 2</div>
             <div class="key-details">
-              <div class="key-name">Fallback 1 — Mêmes modèles (Llama 3.3 70B / Scout)</div>
-              <div style="font-size:10px;color:var(--text3);margin-top:2px">Usage : bascule automatique si KEY 1 atteint la limite de débit</div>
+              <div class="key-name" data-i18n="dash_groq_key2">Fallback 1 — Mêmes modèles (Llama 3.3 70B / Scout)</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:2px" data-i18n="dash_groq_key2_usage">Usage : bascule automatique si KEY 1 atteint la limite de débit</div>
               <div class="key-track"><div class="key-fill low" data-width="0%" style="width:0"></div></div>
             </div>
             <div class="key-pct">0%</div>
@@ -785,7 +822,7 @@
             <div class="key-num">KEY 3</div>
             <div class="key-details">
               <div class="key-name">Fallback 2 — GPT OSS 20B &amp; Llama 4 Scout</div>
-              <div style="font-size:10px;color:var(--text3);margin-top:2px">Usage : bascule si KEY 1 &amp; KEY 2 indisponibles — modèles alternatifs open-source</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:2px" data-i18n="dash_groq_key3_usage">Usage : bascule si KEY 1 &amp; KEY 2 indisponibles — modèles alternatifs open-source</div>
               <div class="key-track"><div class="key-fill low" data-width="0%" style="width:0"></div></div>
             </div>
             <div class="key-pct">0%</div>
@@ -796,7 +833,7 @@
             <div class="key-num">KEY 4</div>
             <div class="key-details">
               <div class="key-name">Fallback 3 — GPT OSS 20B &amp; Kimi K2</div>
-              <div style="font-size:10px;color:var(--text3);margin-top:2px">Usage : dernier recours — garantit la continuité de service 24/7</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:2px" data-i18n="dash_groq_key4_usage">Usage : dernier recours — garantit la continuité de service 24/7</div>
               <div class="key-track"><div class="key-fill low" data-width="0%" style="width:0"></div></div>
             </div>
             <div class="key-pct">0%</div>
@@ -807,10 +844,10 @@
           <div style="margin-top:16px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px">
             <div style="font-size:10px;font-family:'Space Mono',monospace;color:var(--accent);margin-bottom:6px;display:flex;align-items:center;gap:6px">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.3.5.5 1.07.51 1.66V11c0 .7-.2 1.37-.51 1.98z"></path></svg>
-              CONFIGURATION
+              <span data-i18n="dash_configuration">CONFIGURATION</span>
             </div>
             <div style="font-size:11.5px;color:var(--text2);line-height:1.7">
-              Les clés sont définies dans <code style="font-family:'Space Mono',monospace;color:var(--accent);font-size:10.5px">.env</code> :
+              <span data-i18n="dash_env_keys_defined">Les clés sont définies dans <code style="font-family:'Space Mono',monospace;color:var(--accent);font-size:10.5px">.env</code> :</span>
               <code style="display:block;margin-top:6px;padding:6px 10px;background:var(--bg);border-radius:6px;font-size:10.5px;color:var(--text3);font-family:'Space Mono',monospace">
                 GROQ_API_KEY_1=gsk_...<br>
                 GROQ_API_KEY_2=gsk_...<br>
