@@ -517,107 +517,114 @@
       btn.addEventListener('click', () => window.open('https://discord.com/api/oauth2/authorize', '_blank'));
     });
 
-    // Grid trace — segments en coordonnées monde
-    (function() {
+    // Grid trace
+    (function () {
       const canvas = document.getElementById('grid-trace');
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
       const CELL = 60;
-      let W, H, cols;
+      let W, H, cols, rows;
       function resize() {
         W = canvas.width = window.innerWidth;
         H = canvas.height = window.innerHeight;
-        cols = Math.ceil(W / CELL) + 2;
+        cols = Math.ceil(W / CELL) + 1;
+        rows = Math.ceil(H / CELL) + 1;
       }
       resize();
       window.addEventListener('resize', resize);
 
-      let scrollY = window.scrollY, scrollVel = 0, prevScroll = scrollY;
-      let wx = Math.round(Math.floor(cols/2)*CELL/CELL)*CELL;
-      let wy = Math.round((scrollY + H/2)/CELL)*CELL;
-      let twx = wx, twy = wy;
-      let gi = Math.round(wx/CELL);
-      const segments = [], MAX_SEG = 18;
-      const STEP_MS = 460;
+      let prevScroll = window.scrollY, scrollVel = 0;
+      let gi = Math.floor(cols / 2), gj = Math.floor(rows / 2);
+      let px = gi * CELL, py = gj * CELL;
+      let targetX = px, targetY = py;
+      const segs = [], MAX_SEG = 16;
+      const visited = [], MAX_VISITED = 8;
+      let lastDi = 0, lastDj = 0;
+      const STEP_MS = 480;
       let lastTime = 0, timeSinceStep = 0;
+
+      function wasVisited(ni, nj) { return visited.some(v => v.i === ni && v.j === nj); }
 
       function pickNext() {
         const dirs = [{di:1,dj:0},{di:-1,dj:0},{di:0,dj:1},{di:0,dj:-1}];
-        const weights = dirs.map(d => {
-          let w = 1;
-          if (scrollVel > 10 && d.dj === 1) w = 5;
-          if (scrollVel < -10 && d.dj === -1) w = 5;
-          return w;
-        });
-        const tot = weights.reduce((a,b) => a+b, 0);
-        let r = Math.random() * tot;
-        for (let k = 0; k < dirs.length; k++) {
-          r -= weights[k];
-          if (r <= 0) {
-            const ni = gi + dirs[k].di;
-            if (ni < 0 || ni >= cols) continue;
-            const curGj = Math.round(twy/CELL);
-            return { nx: ni*CELL, ny: (curGj + dirs[k].dj)*CELL };
-          }
+        const candidates = [];
+        for (const d of dirs) {
+          const ni = gi + d.di, nj = gj + d.dj;
+          if (ni < 0 || ni >= cols || nj < 1 || nj >= rows - 1) continue;
+          let w = 10;
+          if (d.di === -lastDi && d.dj === -lastDj) w *= 0.05;
+          if (wasVisited(ni, nj)) w *= 0.1;
+          if (scrollVel >  8 && d.dj ===  1) w *= 4;
+          if (scrollVel < -8 && d.dj === -1) w *= 4;
+          if (d.di === lastDi && d.dj === lastDj) w *= 0.6;
+          if (w > 0) candidates.push({ ni, nj, di: d.di, dj: d.dj, w });
         }
-        return { nx: twx, ny: twy };
+        if (!candidates.length) return { ni: gi, nj: gj, di: 0, dj: 0 };
+        const tot = candidates.reduce((a, c) => a + c.w, 0);
+        let r = Math.random() * tot;
+        for (const c of candidates) { r -= c.w; if (r <= 0) return c; }
+        return candidates[candidates.length - 1];
       }
 
       function frame(now) {
         requestAnimationFrame(frame);
         const dt = Math.min(now - lastTime, 80);
         lastTime = now;
-        scrollY = window.scrollY;
-        scrollVel = (scrollY - prevScroll) / (dt/16);
-        prevScroll = scrollY;
+        const curScroll = window.scrollY;
+        const delta = curScroll - prevScroll;
+        scrollVel = delta / (dt / 16);
+        prevScroll = curScroll;
 
-        const speed = 1 + Math.min(Math.abs(scrollVel)/14, 4);
+        py -= delta; targetY -= delta;
+        for (const s of segs) { s.ay -= delta; s.by -= delta; }
+
+        if (targetY < CELL)     targetY = CELL;
+        if (targetY > H - CELL) targetY = H - CELL;
+        py = Math.max(CELL, Math.min(H - CELL, py));
+        gj = Math.max(1, Math.min(rows - 2, Math.round(targetY / CELL)));
+
+        const speed = 1 + Math.min(Math.abs(scrollVel) / 12, 3);
         timeSinceStep += dt * speed;
         if (timeSinceStep >= STEP_MS) {
           timeSinceStep = 0;
-          const {nx,ny} = pickNext();
-          segments.push({ax:twx, ay:twy, bx:nx, by:ny});
-          if (segments.length > MAX_SEG) segments.shift();
-          twx = nx; twy = ny;
-          gi = Math.round(twx/CELL);
+          const next = pickNext();
+          segs.push({ ax: targetX, ay: targetY, bx: next.ni * CELL, by: next.nj * CELL });
+          if (segs.length > MAX_SEG) segs.shift();
+          visited.push({ i: gi, j: gj });
+          if (visited.length > MAX_VISITED) visited.shift();
+          lastDi = next.di; lastDj = next.dj;
+          gi = next.ni; gj = next.nj;
+          targetX = gi * CELL; targetY = gj * CELL;
         }
 
-        wx += (twx - wx) * 0.13;
-        wy += (twy - wy) * 0.13;
+        px += (targetX - px) * 0.14;
+        py += (targetY - py) * 0.14;
 
         ctx.clearRect(0, 0, W, H);
-        const n = segments.length;
+        const n = segs.length;
         for (let i = 0; i < n; i++) {
-          const s = segments[i];
-          const t = (i+1)/(n+1);
-          const sy0 = s.ay - scrollY, sy1 = s.by - scrollY;
-          if (Math.max(sy0,sy1) < -CELL || Math.min(sy0,sy1) > H+CELL) continue;
+          const s = segs[i], t = (i + 1) / (n + 1);
           ctx.beginPath();
-          ctx.moveTo(s.ax, sy0);
-          ctx.lineTo(s.bx, sy1);
-          ctx.strokeStyle = `rgba(45,255,143,${t*0.18})`;
+          ctx.moveTo(s.ax, s.ay); ctx.lineTo(s.bx, s.by);
+          ctx.strokeStyle = `rgba(45,255,143,${t * 0.17})`;
           ctx.lineWidth = 1.5;
-          ctx.shadowColor = 'rgba(45,255,143,0.18)';
-          ctx.shadowBlur = 5;
+          ctx.shadowColor = 'rgba(45,255,143,0.15)'; ctx.shadowBlur = 5;
           ctx.stroke();
         }
-        if (Math.abs(wx-twx) > 0.5 || Math.abs(wy-twy) > 0.5) {
+        if (n > 0) {
+          const last = segs[n - 1];
           ctx.beginPath();
-          ctx.moveTo(twx, twy - scrollY);
-          ctx.lineTo(wx, wy - scrollY);
-          ctx.strokeStyle = 'rgba(45,255,143,0.18)';
+          ctx.moveTo(last.bx, last.by); ctx.lineTo(px, py);
+          ctx.strokeStyle = 'rgba(45,255,143,0.17)';
           ctx.lineWidth = 1.5;
-          ctx.shadowColor = 'rgba(45,255,143,0.18)';
-          ctx.shadowBlur = 5;
+          ctx.shadowColor = 'rgba(45,255,143,0.15)'; ctx.shadowBlur = 5;
           ctx.stroke();
         }
         ctx.beginPath();
-        ctx.arc(wx, wy - scrollY, 3, 0, Math.PI * 2);
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(45,255,143,0.5)';
-        ctx.shadowColor = 'rgba(45,255,143,0.8)';
-        ctx.shadowBlur = 10;
-        ctx.fill();
-        ctx.shadowBlur = 0;
+        ctx.shadowColor = 'rgba(45,255,143,0.8)'; ctx.shadowBlur = 10;
+        ctx.fill(); ctx.shadowBlur = 0;
       }
       requestAnimationFrame(t => { lastTime = t; requestAnimationFrame(frame); });
     })();
