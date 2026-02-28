@@ -14,8 +14,57 @@ from bot.services.groq_client import GroqClient
 from bot.config import TICKET_CHANNEL_PREFIX, BOT_OWNER_DISCORD_ID
 
 
+def _safe_int(v):
+    try:
+        if v is None:
+            return None
+        return int(str(v).replace("#", "").replace("@", "").strip())
+    except Exception:
+        return None
+
+
+def _parse_json(raw, default):
+    try:
+        if raw is None:
+            return default
+        if isinstance(raw, (dict, list)):
+            return raw
+        s = str(raw).strip()
+        if not s:
+            return default
+        return json.loads(s)
+    except Exception:
+        return default
+
+
+def _embed_color(name: str | None) -> discord.Color:
+    n = (name or "").strip().lower()
+    return {
+        "blue": discord.Color.blue(),
+        "green": discord.Color.green(),
+        "red": discord.Color.red(),
+        "yellow": discord.Color.gold(),
+        "purple": discord.Color.purple(),
+    }.get(n, discord.Color.blue())
+
+
 class TicketsCog(commands.Cog):
     """Tickets de support avec traduction en temps reel."""
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        try:
+            data = getattr(interaction, "data", None) or {}
+            custom_id = data.get("custom_id")
+            if not custom_id or not isinstance(custom_id, str):
+                return
+
+            if custom_id.startswith("vai:ticket_open:"):
+                # Button-based open
+                return await self.open_ticket(interaction, topic="")
+        except Exception as e:
+            logger.debug(f"on_interaction ticket_open ignored: {e}")
+            return
 
     def __init__(self, bot):
         self.bot         = bot
@@ -25,7 +74,8 @@ class TicketsCog(commands.Cog):
 
     def _build_ticket_welcome_embed(self, *, ticket_id: int,
                                    user_language: str | None,
-                                   staff_language: str | None) -> discord.Embed:
+                                   staff_language: str | None,
+                                   guild_config: dict | None = None) -> discord.Embed:
         def fmt_lang(code: str | None, pending_label: str) -> str:
             if not code or code == "auto":
                 return pending_label
@@ -34,14 +84,19 @@ class TicketsCog(commands.Cog):
         ul = fmt_lang(user_language, "Détection en cours…")
         sl = fmt_lang(staff_language, "AUTO")
 
-        embed = discord.Embed(
-            title="Ticket de Support",
-            color=discord.Color.blue(),
-            description=(
+        cfg = guild_config or {}
+        custom_desc = (cfg.get("ticket_welcome_message") or "").strip()
+        if not custom_desc:
+            custom_desc = (
                 "Bienvenue ! Décrivez votre problème ci-dessous.\n"
                 "Le bot détectera votre langue à partir de votre premier message.\n"
                 "Un membre du staff vous répondra bientôt."
-            ),
+            )
+
+        embed = discord.Embed(
+            title="Ticket de Support",
+            color=_embed_color(cfg.get("ticket_welcome_color")),
+            description=custom_desc,
         )
         embed.add_field(name="Ticket ID", value=f"`{ticket_id}`", inline=True)
         embed.add_field(name="Langue utilisateur", value=f"`{ul}`", inline=True)
@@ -61,10 +116,12 @@ class TicketsCog(commands.Cog):
             except Exception:
                 return
 
+            guild_config = GuildModel.get(int(ticket.get("guild_id") or 0)) or {}
             embed = self._build_ticket_welcome_embed(
                 ticket_id=ticket_id,
                 user_language=ticket.get("user_language"),
                 staff_language=ticket.get("staff_language"),
+                guild_config=guild_config,
             )
             await welcome_msg.edit(embed=embed, view=TicketCloseView(ticket_id, self.bot))
         except Exception as e:
@@ -232,8 +289,13 @@ class TicketsCog(commands.Cog):
     # ------------------------------------------------------------------
 
     @discord.app_commands.command(name="ticket", description="Ouvrir un ticket de support")
-    async def open_ticket(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+    @discord.app_commands.describe(topic="(Optionnel) Type / sujet du ticket")
+    async def open_ticket(self, interaction: discord.Interaction, topic: str = ""):
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
+        except Exception:
+            pass
 
         guild_config = GuildModel.get(interaction.guild.id)
         if not guild_config:
@@ -244,6 +306,24 @@ class TicketsCog(commands.Cog):
                 ephemeral=True
             )
             return
+
+        # Limite tickets ouverts par utilisateur
+        max_open = guild_config.get("ticket_max_open")
+        try:
+            max_open = int(max_open) if max_open is not None else 1
+        except Exception:
+            max_open = 1
+        if max_open and max_open > 0:
+            try:
+                open_count = TicketModel.count_open_by_user(interaction.guild.id, interaction.user.id)
+            except Exception:
+                open_count = 0
+            if open_count >= max_open:
+                await interaction.followup.send(
+                    f"Vous avez déjà {open_count} ticket(s) ouvert(s). Limite: {max_open}.",
+                    ephemeral=True,
+                )
+                return
 
         category_id = guild_config.get("ticket_category_id")
         if not category_id:
@@ -263,7 +343,11 @@ class TicketsCog(commands.Cog):
             return
 
         # Creer le channel
-        channel_name  = f"{TICKET_CHANNEL_PREFIX}-{interaction.user.name[:16]}-{interaction.user.id}"
+        topic_slug = ""
+        if topic and topic.strip():
+            # Keep Discord channel name safe
+            topic_slug = "-" + "".join(ch for ch in topic.lower()[:12] if ch.isalnum() or ch in {"-", "_"}).strip("-")
+        channel_name  = f"{TICKET_CHANNEL_PREFIX}{topic_slug}-{interaction.user.name[:16]}-{interaction.user.id}"
         ticket_channel = await interaction.guild.create_text_channel(
             channel_name,
             category=category,
@@ -319,9 +403,19 @@ class TicketsCog(commands.Cog):
             ticket_id=ticket_id,
             user_language=user_language,
             staff_language=staff_language,
+            guild_config=guild_config,
         )
         view = TicketCloseView(ticket_id, self.bot)
         welcome_msg = await ticket_channel.send(embed=embed, view=view)
+
+        # Mention staff role if enabled
+        try:
+            if int(guild_config.get("ticket_mention_staff", 1) or 0) == 1 and staff_role_id:
+                staff_role = interaction.guild.get_role(int(staff_role_id))
+                if staff_role:
+                    await ticket_channel.send(staff_role.mention, allowed_mentions=discord.AllowedMentions(roles=True))
+        except Exception:
+            pass
         try:
             TicketModel.update(ticket_id, initial_message_id=welcome_msg.id)
         except Exception:
@@ -393,6 +487,96 @@ class TicketsCog(commands.Cog):
             "Ticket ferme. Resume envoye en DM.", ephemeral=True
         )
         logger.info(f"Ticket {ticket['id']} ferme par {interaction.user.id}")
+
+
+# ============================================================================
+# Vue ouverture ticket (bouton / select)
+# ============================================================================
+
+class TicketOpenButtonView(discord.ui.View):
+    def __init__(self, bot, *, guild_id: int, label: str, style: str, emoji: str | None = None):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.guild_id = int(guild_id)
+
+        # Map style string -> discord.ButtonStyle
+        style_map = {
+            "primary": discord.ButtonStyle.primary,
+            "secondary": discord.ButtonStyle.secondary,
+            "success": discord.ButtonStyle.success,
+            "danger": discord.ButtonStyle.danger,
+        }
+        btn_style = style_map.get((style or "primary").lower(), discord.ButtonStyle.primary)
+
+        self.add_item(
+            discord.ui.Button(
+                custom_id=f"vai:ticket_open:{self.guild_id}",
+                label=(label or "Ouvrir un ticket")[:80],
+                style=btn_style,
+                emoji=(emoji or None),
+            )
+        )
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # Ensure the interaction is in the right guild
+        return interaction.guild is not None and int(interaction.guild.id) == self.guild_id
+
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception, item):
+        logger.warning(f"TicketOpenButtonView error: {error}")
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send("Erreur ouverture ticket.", ephemeral=True)
+            else:
+                await interaction.response.send_message("Erreur ouverture ticket.", ephemeral=True)
+        except Exception:
+            pass
+
+
+class TicketOpenSelect(discord.ui.Select):
+    def __init__(self, bot, *, guild_id: int, placeholder: str, options: list[dict]):
+        self.bot = bot
+        self.guild_id = int(guild_id)
+
+        select_opts: list[discord.SelectOption] = []
+        for o in (options or [])[:25]:
+            try:
+                select_opts.append(
+                    discord.SelectOption(
+                        label=str(o.get("label") or "Option")[:100],
+                        value=str(o.get("value") or str(o.get("label") or "option"))[:100],
+                        description=(str(o.get("description") or "")[:100] or None),
+                        emoji=(o.get("emoji") or None),
+                    )
+                )
+            except Exception:
+                continue
+
+        super().__init__(
+            custom_id=f"vai:ticket_open_select:{self.guild_id}",
+            placeholder=(placeholder or "Sélectionnez le type de ticket")[:150],
+            min_values=1,
+            max_values=1,
+            options=select_opts or [discord.SelectOption(label="Support", value="support")],
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        topic = (self.values[0] if self.values else "")
+        cog = self.bot.get_cog("TicketsCog")
+        if not cog:
+            return await interaction.response.send_message("Tickets: cog introuvable.", ephemeral=True)
+        return await cog.open_ticket(interaction, topic=topic)
+
+
+class TicketOpenSelectView(discord.ui.View):
+    def __init__(self, bot, *, guild_id: int, placeholder: str, options: list[dict]):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.guild_id = int(guild_id)
+        self.add_item(TicketOpenSelect(bot, guild_id=guild_id, placeholder=placeholder, options=options))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.guild is not None and int(interaction.guild.id) == self.guild_id
 
 
 # ============================================================================

@@ -71,6 +71,44 @@ class GuildModel:
             cursor.execute(f"SELECT id FROM {DB_TABLE_PREFIX}guilds")
             return [int(row[0]) for row in cursor.fetchall()]
 
+    @staticmethod
+    def get_needing_ticket_open_deploy(limit: int = 25) -> List[Dict]:
+        """Retourne les guilds qui ont un déploiement du message d'ouverture en attente."""
+        with get_db_context() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                f"SELECT * FROM {DB_TABLE_PREFIX}guilds WHERE ticket_open_needs_deploy = 1 ORDER BY updated_at DESC LIMIT %s",
+                (int(limit),)
+            )
+            return cursor.fetchall()
+
+    @staticmethod
+    def ack_ticket_open_deploy(guild_id: int, *, message_id: int | None) -> bool:
+        """Marque le déploiement comme effectué et stocke l'ID du message posté."""
+        return GuildModel.update(
+            guild_id,
+            ticket_open_needs_deploy=0,
+            ticket_open_message_id=message_id,
+            ticket_open_last_deploy_error=None,
+        )
+
+    @staticmethod
+    def set_ticket_open_deploy_error(guild_id: int, error: str) -> bool:
+        return GuildModel.update(
+            guild_id,
+            ticket_open_needs_deploy=0,
+            ticket_open_last_deploy_error=str(error)[:1900],
+        )
+
+    @staticmethod
+    def ack_ticket_open_delete(guild_id: int) -> bool:
+        return GuildModel.update(
+            guild_id,
+            ticket_open_delete_requested=0,
+            ticket_open_message_id=None,
+            ticket_open_last_deploy_error=None,
+        )
+
 
 # ============================================================================
 # VAI_USERS
@@ -136,6 +174,19 @@ class UserModel:
 # ============================================================================
 
 class TicketModel:
+
+    @staticmethod
+    def count_open_by_user(guild_id: int, user_id: int) -> int:
+        """Compte les tickets ouverts/en cours pour un user dans une guild."""
+        with get_db_context() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"SELECT COUNT(*) FROM {DB_TABLE_PREFIX}tickets "
+                f"WHERE guild_id = %s AND user_id = %s AND status IN ('open','in_progress')",
+                (guild_id, user_id),
+            )
+            return int(cursor.fetchone()[0] or 0)
+
 
     @staticmethod
     def create(guild_id: int, user_id: int, channel_id: int,

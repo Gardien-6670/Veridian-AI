@@ -42,12 +42,24 @@ class GroqClient:
         
         return Groq(api_key=self.api_keys[key_index])
 
-    def generate_support_response(self, message: str, guild_name: str, language: str = 'en') -> str:
-        """Génère une réponse IA avec fallback sur 4 clés."""
+    def generate_support_response(self, message: str, guild_name: str, language: str = 'en',
+                                   custom_prompt: str = None) -> str:
+        """Génère une réponse IA avec fallback sur 4 clés.
+        
+        Si custom_prompt est fourni et non vide, il remplace le prompt système par défaut.
+        Cela permet aux owners de serveur de personnaliser le comportement de l'IA.
+        """
         if not self.api_keys:
             return "Erreur: Aucune clé Groq disponible"
-        
-        system_prompt = SYSTEM_PROMPT_SUPPORT.format(guild_name=guild_name)
+
+        if custom_prompt and custom_prompt.strip():
+            # Le prompt personnalisé est utilisé tel quel, avec le nom du serveur injecté
+            system_prompt = custom_prompt.strip()
+            if "{guild_name}" in system_prompt:
+                system_prompt = system_prompt.replace("{guild_name}", guild_name)
+            logger.debug(f"Support IA: utilisation du prompt personnalise pour {guild_name}")
+        else:
+            system_prompt = SYSTEM_PROMPT_SUPPORT.format(guild_name=guild_name)
         
         for attempt in range(len(self.api_keys)):
             try:

@@ -39,6 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initProgressBars();
   initBarChart();
   initServerSelector();
+  initSettingsTabs();
   initSettingsSave();
   initTicketSearch();
   updateTopbarDate();
@@ -925,6 +926,108 @@ async function validateOrder(btn, orderId, status) {
 // SETTINGS
 // ─────────────────────────────────────────────────────────────
 
+function initSettingsTabs() {
+  // Sub-category tabs inside Settings page
+  const tabs = Array.from(document.querySelectorAll(".settings-tab[data-settings-tab]"));
+  const panels = Array.from(document.querySelectorAll(".settings-panel[data-settings-panel]"));
+  if (!tabs.length || !panels.length) return;
+
+  function activate(tabName) {
+    tabs.forEach((t) => {
+      const on = t.dataset.settingsTab === tabName;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panels.forEach((p) => p.classList.toggle("active", p.dataset.settingsPanel === tabName));
+  }
+
+  tabs.forEach((t) => t.addEventListener("click", () => activate(t.dataset.settingsTab)));
+
+  // Ticket open type: button vs select
+  const openType = document.getElementById("settings-ticket-open-type");
+  const syncOpenTypeVisibility = () => {
+    const mode = openType?.value || "button";
+    document.querySelectorAll("[data-open-type]").forEach((el) => {
+      el.style.display = el.dataset.openType === mode ? "" : "none";
+    });
+  };
+  if (openType) {
+    openType.addEventListener("change", syncOpenTypeVisibility);
+    syncOpenTypeVisibility();
+  }
+
+  // Preview / Deploy
+  const previewBtn = document.getElementById("settings-ticket-preview-btn");
+  const deployBtn = document.getElementById("settings-ticket-deploy-btn");
+  const deleteBtn = document.getElementById("settings-ticket-delete-btn");
+
+  const buildTicketOpenPayload = () => {
+    const channelRaw = (document.getElementById("settings-ticket-open-channel")?.value || "").replace(/[#@]/g, "").trim();
+    const payload = {
+      ticket_open_channel_id: channelRaw ? (parseInt(channelRaw, 10) || null) : null,
+      ticket_open_message: (document.getElementById("settings-ticket-open-message")?.value || "").trim(),
+      ticket_selector_enabled: (document.getElementById("settings-ticket-open-type")?.value || "button") === "select",
+      ticket_button_label: (document.getElementById("settings-ticket-button-label")?.value || "").trim(),
+      ticket_button_style: (document.getElementById("settings-ticket-button-style")?.value || "primary").trim(),
+      ticket_button_emoji: (document.getElementById("settings-ticket-button-emoji")?.value || "").trim(),
+      ticket_selector_placeholder: (document.getElementById("settings-ticket-selector-placeholder")?.value || "").trim(),
+      ticket_selector_options: (document.getElementById("settings-ticket-selector-options")?.value || "").trim(),
+    };
+    return payload;
+  };
+
+  if (previewBtn) {
+    previewBtn.addEventListener("click", () => {
+      const p = buildTicketOpenPayload();
+      let note = "";
+      if (p.ticket_selector_enabled) {
+        note = "Sélecteur activé. Options JSON: " + (p.ticket_selector_options ? "OK" : "VIDE");
+      } else {
+        note = "Bouton: " + (p.ticket_button_label || "(label vide)") + " · style=" + (p.ticket_button_style || "primary");
+      }
+      showToast("Prévisualisation: " + note, "info");
+    });
+  }
+
+  if (deployBtn) {
+    deployBtn.addEventListener("click", async () => {
+      if (!state.currentGuild) return showToast("Aucun serveur sélectionné", "warn");
+      const guildId = state.currentGuild.id;
+      const payload = buildTicketOpenPayload();
+      if (!payload.ticket_open_channel_id) return showToast("Channel d'ouverture manquant", "warn");
+      deployBtn.disabled = true;
+      deployBtn.textContent = "Déploiement…";
+      try {
+        await apiPost(`/internal/guild/${guildId}/tickets/open-message/deploy`, payload);
+        showToast("Message d'ouverture déployé ✅", "success");
+      } catch (e) {
+        showToast("Erreur déploiement: " + e.message, "error");
+      } finally {
+        deployBtn.disabled = false;
+        deployBtn.textContent = "Déployer dans le channel";
+      }
+    });
+  }
+
+  if (deleteBtn) {
+    deleteBtn.addEventListener("click", async () => {
+      if (!state.currentGuild) return showToast("Aucun serveur sélectionné", "warn");
+      if (!confirm("Supprimer le message d'ouverture déjà déployé ?")) return;
+      deleteBtn.disabled = true;
+      deleteBtn.textContent = "Suppression…";
+      try {
+        await apiPost(`/internal/guild/${state.currentGuild.id}/tickets/open-message/delete`, {});
+        showToast("Suppression demandée ✅", "success");
+      } catch (e) {
+        showToast("Erreur suppression: " + e.message, "error");
+      } finally {
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = "Supprimer le message";
+      }
+    });
+  }
+}
+
 async function loadSettings() {
   if (!state.currentGuild) return;
   const guildId = state.currentGuild.id;
@@ -937,6 +1040,22 @@ async function loadSettings() {
       "settings-ticket-category": cfg.ticket_category_id ? cfg.ticket_category_id : "",
       "settings-staff-role": cfg.staff_role_id ? `@${cfg.staff_role_id}` : "",
       "settings-log-channel": cfg.log_channel_id ? `#${cfg.log_channel_id}` : "",
+
+      // Ticket v0.4
+      "settings-ticket-open-channel": cfg.ticket_open_channel_id ? `#${cfg.ticket_open_channel_id}` : "",
+      "settings-ticket-open-message": cfg.ticket_open_message || "",
+      "settings-ticket-button-label": cfg.ticket_button_label || "Ouvrir un ticket",
+      "settings-ticket-button-style": cfg.ticket_button_style || "primary",
+      "settings-ticket-button-emoji": cfg.ticket_button_emoji || "",
+      "settings-ticket-selector-placeholder": cfg.ticket_selector_placeholder || "Sélectionnez le type de ticket",
+      "settings-ticket-selector-options": typeof cfg.ticket_selector_options === "string" ? cfg.ticket_selector_options : (cfg.ticket_selector_options ? JSON.stringify(cfg.ticket_selector_options, null, 2) : "[]"),
+      "settings-ticket-welcome-message": cfg.ticket_welcome_message || "",
+      "settings-ticket-welcome-color": cfg.ticket_welcome_color || "blue",
+      "settings-ticket-max-open": (cfg.ticket_max_open ?? 1),
+      "settings-staff-languages": typeof cfg.staff_languages_json === "string" ? cfg.staff_languages_json : (cfg.staff_languages_json ? JSON.stringify(cfg.staff_languages_json, null, 2) : "[]"),
+
+      // AI custom v0.4
+      "settings-ai-custom-prompt": cfg.ai_custom_prompt || "",
     };
 
     for (const [id, val] of Object.entries(fields)) {
@@ -953,6 +1072,17 @@ async function loadSettings() {
     setToggleState("auto_transcript", !!cfg.auto_transcript);
     setToggleState("ai_moderation", !!cfg.ai_moderation);
     setToggleState("staff_suggestions", !!cfg.staff_suggestions);
+
+    // Ticket / AI v0.4 toggles
+    setToggleState("ticket_mention_staff", !!cfg.ticket_mention_staff);
+    setToggleState("ticket_close_on_leave", !!cfg.ticket_close_on_leave);
+    setToggleState("ai_prompt_enabled", !!cfg.ai_prompt_enabled);
+
+    // Open type selector
+    const openType = document.getElementById("settings-ticket-open-type");
+    if (openType) openType.value = cfg.ticket_selector_enabled ? "select" : "button";
+    // ensure visibility refresh
+    try { document.getElementById("settings-ticket-open-type")?.dispatchEvent(new Event("change")); } catch (_) {}
 
     // Plan actuel (valeur réelle via /stats)
     const planEl = document.getElementById("settings-current-plan");
@@ -1011,6 +1141,25 @@ function initSettingsSave() {
       auto_transcript: getToggleState("auto_transcript"),
       ai_moderation: getToggleState("ai_moderation"),
       staff_suggestions: getToggleState("staff_suggestions"),
+
+      // Ticket v0.4
+      ticket_open_message: (document.getElementById("settings-ticket-open-message")?.value || "").trim(),
+      ticket_button_label: (document.getElementById("settings-ticket-button-label")?.value || "").trim() || "Ouvrir un ticket",
+      ticket_button_style: (document.getElementById("settings-ticket-button-style")?.value || "primary").trim(),
+      ticket_button_emoji: (document.getElementById("settings-ticket-button-emoji")?.value || "").trim(),
+      ticket_welcome_message: (document.getElementById("settings-ticket-welcome-message")?.value || "").trim(),
+      ticket_welcome_color: (document.getElementById("settings-ticket-welcome-color")?.value || "blue").trim(),
+      ticket_selector_enabled: (document.getElementById("settings-ticket-open-type")?.value || "button") === "select",
+      ticket_selector_placeholder: (document.getElementById("settings-ticket-selector-placeholder")?.value || "").trim(),
+      ticket_selector_options: (document.getElementById("settings-ticket-selector-options")?.value || "").trim(),
+      ticket_mention_staff: getToggleState("ticket_mention_staff"),
+      ticket_close_on_leave: getToggleState("ticket_close_on_leave"),
+      ticket_max_open: parseInt(document.getElementById("settings-ticket-max-open")?.value || "1", 10),
+      staff_languages_json: (document.getElementById("settings-staff-languages")?.value || "").trim(),
+
+      // AI custom v0.4
+      ai_custom_prompt: (document.getElementById("settings-ai-custom-prompt")?.value || "").trim(),
+      ai_prompt_enabled: getToggleState("ai_prompt_enabled"),
     };
 
     // Extraire les IDs depuis les champs texte (retirer # et @)
@@ -1025,6 +1174,9 @@ function initSettingsSave() {
 
     const logVal = (document.getElementById("settings-log-channel")?.value || "").replace(/[#@]/g, "").trim();
     cfg.log_channel_id = logVal ? (parseInt(logVal, 10) || null) : null;
+
+    const openChanVal = (document.getElementById("settings-ticket-open-channel")?.value || "").replace(/[#@]/g, "").trim();
+    cfg.ticket_open_channel_id = openChanVal ? (parseInt(openChanVal, 10) || null) : null;
 
     try {
       await apiPut(`/internal/guild/${state.currentGuild.id}/config`, cfg);

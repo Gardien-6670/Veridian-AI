@@ -147,9 +147,161 @@ async def on_ready():
     if not heartbeat_loop.is_running():
         heartbeat_loop.start()
         logger.info("✓ Heartbeat démarré (intervalle: 60s)")
+
+    # Démarrer le poller de déploiement du message d'ouverture des tickets
+    if not ticket_open_deploy_loop.is_running():
+        ticket_open_deploy_loop.start()
+        logger.info("✓ Ticket deploy poller démarré (intervalle: 30s)")
     
     # Premier heartbeat immédiat
     await _update_bot_status()
+
+
+@tasks.loop(seconds=30)
+async def ticket_open_deploy_loop():
+    """Poll DB for guilds that need (re)deploy of ticket open message."""
+    await _deploy_ticket_open_messages()
+
+
+@ticket_open_deploy_loop.before_loop
+async def before_ticket_open_deploy_loop():
+    await bot.wait_until_ready()
+
+
+async def _deploy_ticket_open_messages():
+    try:
+        from bot.db.models import GuildModel
+        from bot.cogs.tickets import TicketOpenButtonView, TicketOpenSelectView
+        import json
+
+        # Handle delete requests first (to avoid editing a message that should be removed)
+        delete_rows = []
+        try:
+            # We reuse get_all and filter here to avoid adding too many new model methods.
+            # If perf becomes an issue, add a dedicated query method.
+            delete_rows = [g for g in GuildModel.get_all() if int(g.get("ticket_open_delete_requested") or 0) == 1]
+        except Exception:
+            delete_rows = []
+
+        for cfg in delete_rows[:25]:
+            guild_id = int(cfg.get("id") or 0)
+            if not guild_id:
+                continue
+            guild = bot.get_guild(guild_id)
+            if not guild:
+                continue
+
+            channel_id = cfg.get("ticket_open_channel_id")
+            try:
+                channel_id = int(channel_id) if channel_id else None
+            except Exception:
+                channel_id = None
+
+            msg_id = cfg.get("ticket_open_message_id")
+            if not (channel_id and msg_id):
+                GuildModel.ack_ticket_open_delete(guild_id)
+                continue
+
+            channel = guild.get_channel(channel_id)
+            if channel is None:
+                try:
+                    channel = await bot.fetch_channel(channel_id)
+                except Exception:
+                    channel = None
+            if channel is None:
+                GuildModel.ack_ticket_open_delete(guild_id)
+                continue
+
+            try:
+                message = await channel.fetch_message(int(msg_id))
+                await message.delete()
+            except Exception:
+                # If it can't be fetched/deleted, clear anyway to unblock
+                pass
+            GuildModel.ack_ticket_open_delete(guild_id)
+
+        rows = GuildModel.get_needing_ticket_open_deploy(limit=25)
+        if not rows:
+            return
+
+        for cfg in rows:
+            guild_id = int(cfg.get("id") or 0)
+            if not guild_id:
+                continue
+
+            guild = bot.get_guild(guild_id)
+            if not guild:
+                # Bot not in guild or cache not ready: keep flag, try later
+                continue
+
+            channel_id = cfg.get("ticket_open_channel_id")
+            try:
+                channel_id = int(channel_id) if channel_id else None
+            except Exception:
+                channel_id = None
+            if not channel_id:
+                # Nothing to deploy to; ack to avoid endless loop
+                GuildModel.ack_ticket_open_deploy(guild_id, message_id=cfg.get("ticket_open_message_id"))
+                continue
+
+            channel = guild.get_channel(channel_id)
+            if channel is None:
+                try:
+                    channel = await bot.fetch_channel(channel_id)
+                except Exception:
+                    channel = None
+            if channel is None:
+                GuildModel.set_ticket_open_deploy_error(guild_id, f"Channel introuvable: {channel_id}")
+                continue
+
+            content = (cfg.get("ticket_open_message") or "").strip() or "Cliquez ci-dessous pour ouvrir un ticket."
+
+            # Build view
+            selector_enabled = int(cfg.get("ticket_selector_enabled") or 0) == 1
+            if selector_enabled:
+                placeholder = (cfg.get("ticket_selector_placeholder") or "Sélectionnez le type de ticket")
+                options_raw = cfg.get("ticket_selector_options")
+                options = []
+                try:
+                    if isinstance(options_raw, str):
+                        options = json.loads(options_raw) if options_raw.strip() else []
+                    elif isinstance(options_raw, list):
+                        options = options_raw
+                except Exception:
+                    options = []
+                view = TicketOpenSelectView(bot, guild_id=guild_id, placeholder=placeholder, options=options)
+            else:
+                view = TicketOpenButtonView(
+                    bot,
+                    guild_id=guild_id,
+                    label=(cfg.get("ticket_button_label") or "Ouvrir un ticket"),
+                    style=(cfg.get("ticket_button_style") or "primary"),
+                    emoji=(cfg.get("ticket_button_emoji") or None),
+                )
+
+            # Send or edit existing
+            msg_id = cfg.get("ticket_open_message_id")
+            message = None
+            try:
+                if msg_id:
+                    message = await channel.fetch_message(int(msg_id))
+            except Exception:
+                message = None
+
+            try:
+                if message:
+                    await message.edit(content=content, view=view)
+                    GuildModel.ack_ticket_open_deploy(guild_id, message_id=int(message.id))
+                else:
+                    sent = await channel.send(content=content, view=view)
+                    GuildModel.ack_ticket_open_deploy(guild_id, message_id=int(sent.id))
+            except Exception as e:
+                logger.warning(f"Ticket open deploy failed for guild {guild_id}: {e}")
+                GuildModel.set_ticket_open_deploy_error(guild_id, str(e))
+                continue
+
+    except Exception as e:
+        logger.debug(f"ticket_open_deploy_loop: {e}")
 
 
 @tasks.loop(seconds=60)

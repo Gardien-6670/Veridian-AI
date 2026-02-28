@@ -499,7 +499,15 @@
         </div>
       </div>
 
-      <div class="grid-2">
+      <!-- Sub-categories -->
+      <div class="settings-tabs" role="tablist" aria-label="Settings categories">
+        <button class="settings-tab active" type="button" data-settings-tab="general" role="tab" aria-selected="true">Général</button>
+        <button class="settings-tab" type="button" data-settings-tab="tickets" role="tab" aria-selected="false">Tickets</button>
+        <button class="settings-tab" type="button" data-settings-tab="ai" role="tab" aria-selected="false">Support AI custom</button>
+      </div>
+
+      <div class="settings-panel active" data-settings-panel="general">
+        <div class="grid-2">
 
         <!-- Bot Config -->
         <div class="card">
@@ -598,7 +606,147 @@
             </div>
           </div>
         </div>
+          </div>
+        </div>
       </div>
+
+      </div><!-- /.grid-2 -->
+      </div><!-- /.settings-panel general -->
+
+      <!-- Tickets panel -->
+      <div class="settings-panel" data-settings-panel="tickets">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><div class="card-dot"></div><span>Ouverture des tickets</span></div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label">Channel du message d'ouverture</label>
+                <input class="form-input" id="settings-ticket-open-channel" type="text" placeholder="#support ou ID">
+                <div style="font-size:10px;color:var(--text3);margin-top:4px">Où le bot postera le message avec bouton/sélecteur.</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Message d'ouverture</label>
+                <textarea class="form-input" id="settings-ticket-open-message" rows="3" placeholder="Ex: Cliquez ci-dessous pour ouvrir un ticket…" style="resize:vertical;font-family:'DM Sans',sans-serif"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Type d'ouverture</label>
+                <select class="form-select" id="settings-ticket-open-type">
+                  <option value="button">Bouton</option>
+                  <option value="select">Sélecteur</option>
+                </select>
+              </div>
+              <div class="form-group" data-open-type="button">
+                <label class="form-label">Label bouton</label>
+                <input class="form-input" id="settings-ticket-button-label" type="text" placeholder="Ouvrir un ticket">
+              </div>
+              <div class="form-group" data-open-type="button">
+                <label class="form-label">Style bouton</label>
+                <select class="form-select" id="settings-ticket-button-style">
+                  <option value="primary">Primary</option>
+                  <option value="secondary">Secondary</option>
+                  <option value="success">Success</option>
+                  <option value="danger">Danger</option>
+                </select>
+              </div>
+              <div class="form-group" data-open-type="button">
+                <label class="form-label">Emoji bouton (optionnel)</label>
+                <input class="form-input" id="settings-ticket-button-emoji" type="text" placeholder="🎫">
+              </div>
+              <div class="form-group" data-open-type="select" style="display:none">
+                <label class="form-label">Placeholder du sélecteur</label>
+                <input class="form-input" id="settings-ticket-selector-placeholder" type="text" placeholder="Sélectionnez le type de ticket">
+              </div>
+              <div class="form-group" data-open-type="select" style="display:none">
+                <label class="form-label">Options du sélecteur (JSON)</label>
+                <textarea class="form-input" id="settings-ticket-selector-options" rows="5" placeholder='[{"label":"Bug","value":"bug","description":"Signaler un bug","emoji":"🐞"}]' style="resize:vertical;font-family:'Space Mono',monospace"></textarea>
+                <div style="font-size:10px;color:var(--text3);margin-top:4px">Format: [{label,value,description,emoji}]</div>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-ghost btn-sm" type="button" id="settings-ticket-preview-btn">Prévisualiser</button>
+                <button class="btn btn-primary btn-sm" type="button" id="settings-ticket-deploy-btn">Déployer dans le channel</button>
+                <button class="btn btn-red btn-sm" type="button" id="settings-ticket-delete-btn">Supprimer le message</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><div class="card-dot"></div><span>Comportement &amp; messages</span></div>
+            </div>
+            <div class="card-body">
+              <div class="form-group">
+                <label class="form-label">Message de bienvenue (dans le ticket)</label>
+                <textarea class="form-input" id="settings-ticket-welcome-message" rows="3" placeholder="Bienvenue ! Décrivez votre problème…" style="resize:vertical;font-family:'DM Sans',sans-serif"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Couleur embed bienvenue</label>
+                <select class="form-select" id="settings-ticket-welcome-color">
+                  <option value="blue">Bleu</option>
+                  <option value="green">Vert</option>
+                  <option value="yellow">Jaune</option>
+                  <option value="red">Rouge</option>
+                  <option value="purple">Violet</option>
+                </select>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <div class="toggle-name">Mentionner le staff à l'ouverture</div>
+                  <div class="toggle-desc">Ping du rôle staff dans le channel de ticket</div>
+                </div>
+                <div class="toggle-switch" id="toggle-ticket-mention-staff" data-setting-key="ticket_mention_staff"></div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <div class="toggle-name">Fermer si l'utilisateur quitte le serveur</div>
+                  <div class="toggle-desc">Clôture automatique (optionnel)</div>
+                </div>
+                <div class="toggle-switch" id="toggle-ticket-close-on-leave" data-setting-key="ticket_close_on_leave"></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Max tickets ouverts / utilisateur</label>
+                <input class="form-input" id="settings-ticket-max-open" type="number" min="0" step="1" placeholder="1">
+                <div style="font-size:10px;color:var(--text3);margin-top:4px">0 = illimité</div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info">
+                  <div class="toggle-name">Traduction dans les tickets</div>
+                  <div class="toggle-desc">Utilise le switch global "Traduction automatique"</div>
+                </div>
+                <div class="toggle-switch" style="opacity:.4;pointer-events:none" data-setting-key="auto_translate"></div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Langues du staff (JSON)</label>
+                <textarea class="form-input" id="settings-staff-languages" rows="5" placeholder='[{"user_id":123,"username":"Mod","language":"fr"}]' style="resize:vertical;font-family:'Space Mono',monospace"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /.settings-panel tickets -->
+
+      <!-- AI custom panel -->
+      <div class="settings-panel" data-settings-panel="ai">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><div class="card-dot"></div><span>Support AI custom</span></div>
+          </div>
+          <div class="card-body">
+            <div class="toggle-row">
+              <div class="toggle-info">
+                <div class="toggle-name">Activer le prompt personnalisé</div>
+                <div class="toggle-desc">Permet à l'owner de définir le comportement de l'IA de support</div>
+              </div>
+              <div class="toggle-switch" id="toggle-ai-prompt-enabled" data-setting-key="ai_prompt_enabled"></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Prompt système personnalisé</label>
+              <textarea class="form-input" id="settings-ai-custom-prompt" rows="10" placeholder="Décris ici le thème du serveur, les règles, et comment l'IA doit aider…\n\nAstuce: vous pouvez utiliser {guild_name}." style="resize:vertical;font-family:'Space Mono',monospace"></textarea>
+              <div style="font-size:10px;color:var(--text3);margin-top:4px">Ce texte est stocké en DB et utilisé par le bot pour les réponses dans le support public.</div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /.settings-panel ai -->
     </div>
 
     <!-- ══════════════════════════════════════════════════════

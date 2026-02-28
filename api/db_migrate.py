@@ -347,6 +347,48 @@ def _ensure_ticket_migrations() -> None:
                         logger.warning(f"[db] ALTER {msgs_table}.attachments_json: {e}")
 
 
+def _ensure_guild_v04_migrations() -> None:
+    """Ajoute les colonnes v0.4 a vai_guilds (ticket custom + AI prompt)."""
+    table = f"{DB_TABLE_PREFIX}guilds"
+    if not _table_exists(table):
+        return
+
+    new_columns = {
+        "ticket_open_channel_id":     "BIGINT NULL COMMENT 'Channel bouton/selecteur ouverture ticket'",
+        "ticket_open_message":        "TEXT NULL COMMENT 'Message avec bouton/selecteur'",
+        "ticket_button_label":        "VARCHAR(100) DEFAULT 'Ouvrir un ticket'",
+        "ticket_button_style":        "VARCHAR(20) DEFAULT 'primary'",
+        "ticket_button_emoji":        "VARCHAR(50) NULL",
+        "ticket_welcome_message":     "TEXT NULL COMMENT 'Message bienvenue personnalise'",
+        "ticket_welcome_color":       "VARCHAR(10) DEFAULT 'blue'",
+        "ticket_selector_enabled":    "TINYINT(1) DEFAULT 0",
+        "ticket_selector_placeholder": "VARCHAR(200) DEFAULT 'Selectionnez le type de ticket'",
+        "ticket_selector_options":    "JSON NULL",
+        "ticket_mention_staff":       "TINYINT(1) DEFAULT 1",
+        "ticket_close_on_leave":      "TINYINT(1) DEFAULT 0",
+        "ticket_max_open":            "INT DEFAULT 1",
+        "staff_languages_json":       "JSON NULL COMMENT 'Langues staff [{user_id,username,language}]'",
+        "ai_custom_prompt":           "TEXT NULL COMMENT 'Prompt IA personnalise'",
+        "ai_prompt_enabled":          "TINYINT(1) DEFAULT 0",
+        # Deploy queue / persistence
+        "ticket_open_message_id":      "BIGINT NULL COMMENT 'Message ID du message ouverture tickets (pour edit)'",
+        "ticket_open_needs_deploy":    "TINYINT(1) DEFAULT 0 COMMENT '1 = bot doit (re)deployer le message ouverture'",
+        "ticket_open_last_deploy_error": "TEXT NULL COMMENT 'Derniere erreur de deploiement (debug)'",
+        "ticket_open_delete_requested":  "TINYINT(1) DEFAULT 0 COMMENT '1 = bot doit supprimer le message ouverture'",
+    }
+
+    for col_name, col_def in new_columns.items():
+        if _column_info(table, col_name) is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_def}")
+                    logger.info(f"[db] Colonne {col_name} ajoutee a {table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {table}.{col_name}: {e}")
+
+
 def _ensure_knowledge_base_migrations() -> None:
     """Ajoute les colonnes KB manquantes (schema drift)."""
     table = f"{DB_TABLE_PREFIX}knowledge_base"
@@ -396,6 +438,7 @@ def ensure_database_schema() -> None:
     _ensure_bot_status_migrations()
     _ensure_ticket_migrations()
     _ensure_knowledge_base_migrations()
+    _ensure_guild_v04_migrations()
 
     # Re-apply views after ALTERs (best-effort).
     try:

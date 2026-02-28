@@ -39,10 +39,15 @@ class SupportCog(commands.Cog):
         async with message.channel.typing():
             try:
                 language = self.translator.detect_language(message.content) or "en"
+                # Utiliser le prompt personnalise si active
+                custom_prompt = None
+                if guild_config.get("ai_prompt_enabled") and guild_config.get("ai_custom_prompt"):
+                    custom_prompt = guild_config["ai_custom_prompt"]
                 response = self.groq_client.generate_support_response(
                     message.content,
                     guild_name=message.guild.name,
-                    language=language
+                    language=language,
+                    custom_prompt=custom_prompt
                 )
                 await message.reply(response[:2000], mention_author=False,
                                     suppress_embeds=True)

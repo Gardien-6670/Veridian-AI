@@ -187,18 +187,36 @@ def verify_guild_access(
 # ============================================================================
 
 class GuildConfigBody(BaseModel):
-    name:                Optional[str]  = None
-    support_channel_id:  Optional[int]  = None
-    ticket_category_id:  Optional[int]  = None
-    staff_role_id:       Optional[int]  = None
-    log_channel_id:      Optional[int]  = None
-    welcome_channel_id:  Optional[int]  = None
-    default_language:    Optional[str]  = None
-    auto_translate:      Optional[bool] = None
-    public_support:      Optional[bool] = None
-    auto_transcript:     Optional[bool] = None
-    ai_moderation:       Optional[bool] = None
-    staff_suggestions:   Optional[bool] = None
+    name:                        Optional[str]  = None
+    support_channel_id:          Optional[int]  = None
+    ticket_category_id:          Optional[int]  = None
+    staff_role_id:               Optional[int]  = None
+    log_channel_id:              Optional[int]  = None
+    welcome_channel_id:          Optional[int]  = None
+    default_language:            Optional[str]  = None
+    auto_translate:              Optional[bool] = None
+    public_support:              Optional[bool] = None
+    auto_transcript:             Optional[bool] = None
+    ai_moderation:               Optional[bool] = None
+    staff_suggestions:           Optional[bool] = None
+    # Ticket system v0.4
+    ticket_open_channel_id:      Optional[int]  = None
+    ticket_open_message:         Optional[str]  = None
+    ticket_button_label:         Optional[str]  = None
+    ticket_button_style:         Optional[str]  = None
+    ticket_button_emoji:         Optional[str]  = None
+    ticket_welcome_message:      Optional[str]  = None
+    ticket_welcome_color:        Optional[str]  = None
+    ticket_selector_enabled:     Optional[bool] = None
+    ticket_selector_placeholder: Optional[str]  = None
+    ticket_selector_options:     Optional[str]  = None  # JSON string
+    ticket_mention_staff:        Optional[bool] = None
+    ticket_close_on_leave:       Optional[bool] = None
+    ticket_max_open:             Optional[int]  = None
+    staff_languages_json:        Optional[str]  = None  # JSON string
+    # AI Support custom v0.4
+    ai_custom_prompt:            Optional[str]  = None
+    ai_prompt_enabled:           Optional[bool] = None
 
 
 class OrderStatusBody(BaseModel):
@@ -262,6 +280,24 @@ def get_guild_config(guild_id: int):
             "auto_transcript": 1,
             "ai_moderation": 0,
             "staff_suggestions": 0,
+            # Ticket v0.4 defaults
+            "ticket_open_channel_id": None,
+            "ticket_open_message": "",
+            "ticket_button_label": "Ouvrir un ticket",
+            "ticket_button_style": "primary",
+            "ticket_button_emoji": "",
+            "ticket_welcome_message": "",
+            "ticket_welcome_color": "blue",
+            "ticket_selector_enabled": 0,
+            "ticket_selector_placeholder": "Selectionnez le type de ticket",
+            "ticket_selector_options": "[]",
+            "ticket_mention_staff": 1,
+            "ticket_close_on_leave": 0,
+            "ticket_max_open": 1,
+            "staff_languages_json": "[]",
+            # AI v0.4 defaults
+            "ai_custom_prompt": "",
+            "ai_prompt_enabled": 0,
         }
     return guild
 
@@ -301,6 +337,61 @@ def update_guild_config(guild_id: int, body: GuildConfigBody, request: Request):
 # ============================================================================
 # Tickets
 # ============================================================================
+
+@router.post("/guild/{guild_id}/tickets/open-message/deploy", dependencies=[Depends(verify_guild_access)])
+def deploy_ticket_open_message(guild_id: int, body: GuildConfigBody, request: Request):
+    """Déploie le message d'ouverture de tickets dans un channel.
+
+    Le dashboard envoie les champs ticket_open_* (message/bouton/sélecteur).
+    Le bot consommera cet endpoint via un internal route (bot-side) ou l'API
+    enverra un ordre au bot (selon votre infra). Ici on persiste d'abord en DB
+    puis on émet un événement best-effort via une table/queue si dispo.
+
+    NOTE: pour l'instant, on persiste seulement. Le bot peut avoir un /sync
+    ou un poll, ou vous pouvez implémenter un webhook/WS plus tard.
+    """
+    # Persist config first
+    updates = dict(body.dict(exclude_unset=True).items())
+    for k, v in updates.items():
+        if isinstance(v, bool):
+            updates[k] = int(v)
+
+    if updates:
+        # Mark for bot deployment (poller)
+        updates["ticket_open_needs_deploy"] = 1
+        GuildModel.update(guild_id, **updates)
+
+    # Audit log
+    actor_id = getattr(request.state, "user_id", None)
+    AuditLogModel.log(
+        actor_id=actor_id or 0,
+        action="tickets.open_message.deploy",
+        guild_id=guild_id,
+        details=updates,
+        ip_address=request.client.host if request.client else None
+    )
+
+    # Best-effort: mark a 'needs_deploy' flag in DB if you later add it.
+    return {"status": "queued", "guild_id": guild_id}
+
+
+@router.post("/guild/{guild_id}/tickets/open-message/delete", dependencies=[Depends(verify_guild_access)])
+def request_delete_ticket_open_message(guild_id: int, request: Request):
+    # Mark delete requested; bot will delete and clear message_id.
+    updates = {"ticket_open_delete_requested": 1}
+    GuildModel.update(guild_id, **updates)
+
+    actor_id = getattr(request.state, "user_id", None)
+    AuditLogModel.log(
+        actor_id=actor_id or 0,
+        action="tickets.open_message.delete",
+        guild_id=guild_id,
+        details=updates,
+        ip_address=request.client.host if request.client else None
+    )
+
+    return {"status": "queued", "guild_id": guild_id}
+
 
 @router.get("/guild/{guild_id}/tickets", dependencies=[Depends(verify_guild_access)])
 def get_guild_tickets(guild_id: int, status: Optional[str] = None,
