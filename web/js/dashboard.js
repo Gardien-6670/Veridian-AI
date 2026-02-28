@@ -1084,6 +1084,20 @@ async function loadSettings() {
     // ensure visibility refresh
     try { document.getElementById("settings-ticket-open-type")?.dispatchEvent(new Event("change")); } catch (_) {}
 
+    // Deploy error display
+    const errBox = document.getElementById("settings-ticket-deploy-error");
+    const errText = document.getElementById("settings-ticket-deploy-error-text");
+    const lastErr = (cfg.ticket_open_last_deploy_error || "").trim();
+    if (errBox && errText) {
+      if (lastErr) {
+        errText.textContent = lastErr;
+        errBox.style.display = "block";
+      } else {
+        errText.textContent = "";
+        errBox.style.display = "none";
+      }
+    }
+
     // Plan actuel (valeur réelle via /stats)
     const planEl = document.getElementById("settings-current-plan");
     const priceEl = document.getElementById("settings-current-plan-price");

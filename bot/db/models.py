@@ -76,8 +76,9 @@ class GuildModel:
         """Retourne les guilds qui ont un déploiement du message d'ouverture en attente."""
         with get_db_context() as conn:
             cursor = conn.cursor(dictionary=True)
+            # Some deployments may not have updated_at column; keep it portable.
             cursor.execute(
-                f"SELECT * FROM {DB_TABLE_PREFIX}guilds WHERE ticket_open_needs_deploy = 1 ORDER BY updated_at DESC LIMIT %s",
+                f"SELECT * FROM {DB_TABLE_PREFIX}guilds WHERE ticket_open_needs_deploy = 1 ORDER BY created_at DESC LIMIT %s",
                 (int(limit),)
             )
             return cursor.fetchall()
