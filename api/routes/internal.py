@@ -243,6 +243,10 @@ class KBEntryBody(BaseModel):
     created_by: Optional[int] = None
 
 
+class TicketPriorityBody(BaseModel):
+    priority: str
+
+
 # ============================================================================
 # Health
 # ============================================================================
@@ -477,6 +481,64 @@ def close_ticket_dashboard(ticket_id: int, request: Request):
     AuditLogModel.log(actor_id=actor_id or 0, action="ticket.close",
                       guild_id=ticket["guild_id"], target_id=str(ticket_id))
     return {"status": "success", "ticket_id": ticket_id}
+
+
+@router.put("/ticket/{ticket_id}/priority", dependencies=[Depends(verify_internal_auth)])
+def update_ticket_priority(ticket_id: int, body: TicketPriorityBody, request: Request):
+    """
+    Met à jour la priorité d'un ticket (bas, moyen, haut, prioritaire)
+    depuis le dashboard ou un outil interne.
+    """
+    ticket = TicketModel.get(ticket_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    # Vérifier l'accès à la guild du ticket pour les utilisateurs non super-admin.
+    if not getattr(request.state, "is_super_admin", False):
+        allowed = getattr(request.state, "guild_ids", None)
+        if allowed is not None:
+            norm_allowed = set()
+            for x in (allowed or []):
+                try:
+                    norm_allowed.add(int(x))
+                except Exception:
+                    pass
+            if int(ticket.get("guild_id", 0)) not in norm_allowed:
+                raise HTTPException(status_code=403, detail="Acces refuse a ce ticket")
+
+    raw = (body.priority or "").strip().lower()
+    # Normalisation vers les 4 valeurs internes supportées.
+    mapping = {
+        "bas": "low",
+        "low": "low",
+        "basse": "low",
+        "moyen": "medium",
+        "moyenne": "medium",
+        "medium": "medium",
+        "haut": "high",
+        "haute": "high",
+        "eleve": "high",
+        "élevé": "high",
+        "prioritaire": "urgent",
+        "urgent": "urgent",
+    }
+    norm = mapping.get(raw, raw)
+    if norm not in {"low", "medium", "high", "urgent"}:
+        raise HTTPException(status_code=400, detail="Priorite invalide")
+
+    TicketModel.update(ticket_id, priority=norm)
+
+    actor_id = getattr(request.state, "user_id", None)
+    AuditLogModel.log(
+        actor_id=actor_id or 0,
+        action="ticket.priority",
+        guild_id=ticket.get("guild_id"),
+        target_id=str(ticket_id),
+        details={"priority": norm},
+        ip_address=request.client.host if request.client else None,
+    )
+
+    return {"status": "success", "ticket_id": ticket_id, "priority": norm}
 
 
 # ============================================================================

@@ -49,17 +49,21 @@ class TranslatorService:
     def detect_language(self, text: str) -> Optional[str]:
         """
         Détecte la langue d'un texte.
-        
+
+        La détection est volontairement prudente pour éviter les mauvaises
+        classifications sur des messages très courts ou ambigus. On préfère
+        ne rien détecter plutôt que de fixer une mauvaise langue.
+
         Args:
             text: Texte à analyser
-            
+
         Returns:
-            Code langue (ex: 'en', 'fr', 'es')
+            Code langue (ex: 'en', 'fr', 'es') ou None si le signal est trop faible.
         """
         try:
             cleaned = self._clean_for_detection(text)
-            # Too short/low-signal inputs make langdetect very unreliable.
-            if len(cleaned) < 12 or len(cleaned.split()) < 3:
+            # Messages trop courts -> signal faible, on laisse les fallback décider.
+            if len(cleaned) < 8 or len(cleaned.split()) < 2:
                 return None
 
             langs = detect_langs(cleaned)
@@ -67,15 +71,23 @@ class TranslatorService:
                 return None
 
             top = langs[0]
-            # Heuristic confidence gate: for short messages, require high confidence.
-            if getattr(top, "prob", 0.0) < 0.70 and len(cleaned) < 80:
-                return None
+            prob = float(getattr(top, "prob", 0.0) or 0.0)
+
+            # Heuristique de confiance:
+            # - pour les messages courts, exiger une probabilité très élevée
+            # - pour les messages longs, être un peu plus permissif
+            if len(cleaned) < 80:
+                if prob < 0.80:
+                    return None
+            else:
+                if prob < 0.60:
+                    return None
 
             language = getattr(top, "lang", None)
             if not language or len(language) != 2:
                 return None
 
-            logger.debug(f"✓ Langue détectée: {language} (p={getattr(top,'prob',0.0):.2f})")
+            logger.debug(f"✓ Langue détectée: {language} (p={prob:.2f})")
             return language
         except LangDetectException as e:
             logger.warning(f"Impossible de détecter la langue: {e}")

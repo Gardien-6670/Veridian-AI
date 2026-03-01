@@ -62,6 +62,7 @@ function bindStaticActions() {
       const action = actionEl.dataset.action;
       if (action === "logout") return void logout();
       if (action === "close-transcript") return void closeTranscriptModal();
+      if (action === "export-transcript-pdf") return void exportTranscriptPdf();
       if (action === "refresh-dashboard") return void loadDashboardStats();
       if (action === "refresh-tickets") return void loadTickets();
       if (action === "refresh-orders") return void loadOrders();
@@ -103,6 +104,16 @@ function bindStaticActions() {
   // Escape closes the transcript modal (if open).
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeTranscriptModal();
+  });
+
+  // Changement de priorité de ticket (delegation change)
+  document.addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-ticket-priority-select]");
+    if (!sel) return;
+    const ticketId = parseInt(sel.dataset.ticketId, 10);
+    const value = sel.value;
+    if (!Number.isFinite(ticketId) || !value) return;
+    updateTicketPriority(ticketId, value, sel);
   });
 }
 
@@ -737,14 +748,14 @@ async function loadTickets() {
   const guildId = state.currentGuild.id;
 
   const tbody = document.getElementById("tickets-tbody");
-  if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">Chargement…</td></tr>`;
+  if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Chargement…</td></tr>`;
 
   try {
     const data = await apiFetch(`/internal/guild/${guildId}/tickets`, { auth: true });
     allTickets = data.tickets || [];
     renderTickets(allTickets);
   } catch (e) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--red);padding:24px">Erreur: ${escHtml(e.message || String(e))}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--red);padding:24px">Erreur: ${escHtml(e.message || String(e))}</td></tr>`;
   }
 }
 
@@ -753,7 +764,7 @@ function renderTickets(tickets) {
   if (!tbody) return;
 
   if (!tickets.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">Aucun ticket trouvé</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Aucun ticket trouvé</td></tr>`;
     return;
   }
 
@@ -762,12 +773,39 @@ function renderTickets(tickets) {
     const statusLabel = { open: "Ouvert", closed: "Fermé", in_progress: "En cours" }[t.status] || t.status;
     const date = t.opened_at ? new Date(t.opened_at).toLocaleDateString("fr-FR") : "—";
     const flag = LANG_FLAGS[t.user_language] || "🌐";
+    const priorityRaw = (t.priority || "medium").toLowerCase();
+    const priorityLabelMap = {
+      low: "Bas",
+      medium: "Moyen",
+      high: "Haut",
+      urgent: "Prioritaire",
+    };
+    const priorityLabel = priorityLabelMap[priorityRaw] || priorityRaw;
+    const priorityClassMap = {
+      low: "priority-dot low",
+      medium: "priority-dot mid",
+      high: "priority-dot high",
+      urgent: "priority-dot high",
+    };
+    const priorityClass = priorityClassMap[priorityRaw] || "priority-dot mid";
     const tid = parseInt(String(t.id), 10);
     return `
     <tr>
       <td><span class="mono-id">#${Number.isFinite(tid) ? tid : escHtml(t.id)}</span></td>
       <td>${escHtml(t.user_username || String(t.user_id))}</td>
       <td><span class="${statusClass}">${escHtml(statusLabel)}</span></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="${priorityClass}">${escHtml(priorityLabel)}</span>
+          ${Number.isFinite(tid) ? `
+          <select data-ticket-priority-select data-ticket-id="${tid}" style="background:var(--surface);border:1px solid var(--border2);color:var(--text3);font-size:10px;border-radius:999px;padding:2px 6px;">
+            <option value="low" ${priorityRaw === "low" ? "selected" : ""}>Bas</option>
+            <option value="medium" ${priorityRaw === "medium" ? "selected" : ""}>Moyen</option>
+            <option value="high" ${priorityRaw === "high" ? "selected" : ""}>Haut</option>
+            <option value="urgent" ${priorityRaw === "urgent" ? "selected" : ""}>Prioritaire</option>
+          </select>` : ""}
+        </div>
+      </td>
       <td>${escHtml(flag)} ${escHtml((t.user_language || "").toUpperCase())}</td>
       <td>${escHtml(t.assigned_staff_name || "—")}</td>
       <td class="mono-grey">${date}</td>
@@ -812,20 +850,163 @@ async function viewTicketTranscript(ticketId) {
   if (!modal || !content) return;
 
   content.textContent = "Chargement…";
+  content.dataset.rawText = "";
   modal.style.display = "flex";
 
   try {
     const data = await apiFetch(`/internal/ticket/${ticketId}/transcript`, { auth: true });
-    content.textContent = data.transcript || "Aucune transcription disponible.";
-    document.getElementById("transcript-title").textContent = `Ticket #${ticketId}`;
+    const titleEl = document.getElementById("transcript-title");
+    if (titleEl) titleEl.textContent = `Ticket #${ticketId}`;
+
+    const lines = [];
+
+    // Résumé IA (si présent)
+    if ((data.transcript || "").trim()) {
+      lines.push("Résumé automatique du ticket");
+      lines.push("-----------------------------");
+      lines.push(String(data.transcript || "").trim());
+      lines.push("");
+      lines.push("");
+    }
+
+    // Messages détaillés : original + traduction éventuelle
+    const msgs = Array.isArray(data.messages) ? data.messages : [];
+    for (const m of msgs) {
+      const author = m.author_username || String(m.author_id || "?");
+      let ts = "";
+      if (m.sent_at) {
+        try {
+          const d = new Date(m.sent_at);
+          ts = d.toLocaleString("fr-FR");
+        } catch (_) {
+          ts = String(m.sent_at);
+        }
+      }
+      const origLang = (m.original_language || "").toUpperCase();
+      const tgtLang = (m.target_language || "").toUpperCase();
+      const headerParts = [];
+      if (ts) headerParts.push(ts);
+      headerParts.push(author);
+      if (origLang) {
+        if (tgtLang && tgtLang !== origLang) {
+          headerParts.push(`${origLang} → ${tgtLang}`);
+        } else {
+          headerParts.push(origLang);
+        }
+      }
+      lines.push(headerParts.join(" · "));
+      lines.push("");
+
+      const original = (m.original_content || "").trim();
+      if (original) {
+        lines.push("Message original :");
+        lines.push(original);
+        lines.push("");
+      }
+
+      const translated = (m.translated_content || "").trim();
+      if (translated) {
+        lines.push("Traduction :");
+        lines.push(translated);
+        lines.push("");
+      }
+
+      lines.push("────────────────────────────────────────");
+      lines.push("");
+    }
+
+    const finalText = lines.length ? lines.join("\n") : "Aucune transcription disponible.";
+    content.textContent = finalText;
+    content.dataset.rawText = finalText;
   } catch (e) {
     content.textContent = "Erreur: " + e.message;
+    content.dataset.rawText = "";
   }
 }
 
 function closeTranscriptModal() {
   const modal = document.getElementById("transcript-modal");
   if (modal) modal.style.display = "none";
+}
+
+function exportTranscriptPdf() {
+  const content = document.getElementById("transcript-content");
+  if (!content) return;
+  const raw = content.dataset.rawText || content.textContent || "";
+  const text = String(raw || "").trim();
+  if (!text) {
+    showToast("Aucune transcription à exporter", "warn");
+    return;
+  }
+
+  const titleEl = document.getElementById("transcript-title");
+  const title = titleEl ? titleEl.textContent || "Transcription" : "Transcription";
+
+  const win = window.open("", "_blank", "width=900,height=1000");
+  if (!win) {
+    showToast("Impossible d'ouvrir la fenêtre d'export (popup bloquée)", "warn");
+    return;
+  }
+
+  const safeTitle = escHtml(title);
+  const safeBody = escHtml(text);
+
+  win.document.write(`
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>${safeTitle}</title>
+        <style>
+          body {
+            font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #111;
+            background: #fff;
+            padding: 24px;
+            white-space: pre-wrap;
+          }
+          h1 {
+            font-size: 18px;
+            margin: 0 0 16px;
+          }
+          pre {
+            font-family: "Space Mono",ui-monospace,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+            font-size: 11px;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>${safeTitle}</h1>
+        <pre>${safeBody}</pre>
+      </body>
+    </html>
+  `);
+  win.document.close();
+  win.focus();
+  try {
+    win.print();
+  } catch (_) {
+    // L'utilisateur pourra utiliser le menu du navigateur si nécessaire.
+  }
+}
+
+async function updateTicketPriority(ticketId, priority, selectEl) {
+  const prev = selectEl.value;
+  selectEl.disabled = true;
+  try {
+    await apiFetch(`/internal/ticket/${ticketId}/priority`, {
+      method: "PUT",
+      auth: true,
+      body: { priority },
+    });
+    showToast(`Priorité mise à jour`, "success");
+  } catch (e) {
+    selectEl.value = prev;
+    showToast("Erreur mise à jour priorité: " + e.message, "error");
+  } finally {
+    selectEl.disabled = false;
+  }
 }
 
 async function closeTicket(ticketId) {

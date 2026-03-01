@@ -303,6 +303,21 @@ def _ensure_ticket_migrations() -> None:
                     if "duplicate column" not in str(e).lower():
                         logger.warning(f"[db] ALTER {tickets_table}.initial_message_id: {e}")
 
+        # Priorité du ticket (bas / moyen / haut / urgent) pour triage.
+        if _column_info(tickets_table, "priority") is None:
+            with get_db_context() as conn:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"ALTER TABLE {tickets_table} "
+                        f"ADD COLUMN priority VARCHAR(20) DEFAULT 'medium' "
+                        f"COMMENT 'Priorite du ticket: low|medium|high|urgent'"
+                    )
+                    logger.info(f"[db] Colonne priority ajoutee a {tickets_table}")
+                except Exception as e:
+                    if "duplicate column" not in str(e).lower():
+                        logger.warning(f"[db] ALTER {tickets_table}.priority: {e}")
+
     msgs_table = f"{DB_TABLE_PREFIX}ticket_messages"
     if _table_exists(msgs_table):
         if _column_info(msgs_table, "author_username") is None:

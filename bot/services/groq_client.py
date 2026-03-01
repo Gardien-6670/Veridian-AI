@@ -171,6 +171,77 @@ class GroqClient:
         
         return "Impossible de générer le résumé du ticket."
 
+    def classify_ticket_priority(self, messages: list, ticket_language: str) -> str:
+        """
+        Classe la priorité d'un ticket : low, medium, high, urgent.
+
+        `messages` est une liste de dicts {author, content}.
+        """
+        if not self.api_keys:
+            return "medium"
+
+        # On limite la taille du contexte pour rester efficace.
+        chunks = []
+        total_chars = 0
+        for msg in messages or []:
+            line = f"[{msg.get('author', 'Unknown')}]: {msg.get('content', '')}".strip()
+            if not line:
+                continue
+            if total_chars + len(line) > 4000:
+                break
+            chunks.append(line)
+            total_chars += len(line)
+
+        conversation = "\n".join(chunks)
+
+        system = (
+            "You are a support triage assistant for a Discord ticket system.\n"
+            "Your job is to analyse the conversation and assign a single priority "
+            "label according to the severity and urgency.\n\n"
+            "Available priorities:\n"
+            "- low: question simple, demande d'information, pas d'urgence.\n"
+            "- medium: problème à résoudre mais pas bloquant immédiatement.\n"
+            "- high: service perturbé, utilisateur bloqué sur une action importante.\n"
+            "- urgent: incident critique, service principal down, urgence forte.\n\n"
+            "Rules:\n"
+            "- Think carefully but respond with ONLY one word among: low, medium, high, urgent.\n"
+            "- Do not add any explanation or extra text.\n"
+        )
+
+        user_prompt = (
+            f"Ticket language (hint): {ticket_language}\n"
+            f"Conversation:\n{conversation}\n\n"
+            "Return the priority label now (low, medium, high or urgent)."
+        )
+
+        for attempt in range(len(self.api_keys)):
+            try:
+                client = self._get_client(force_key_index=attempt)
+                if not client:
+                    continue
+
+                completion = client.chat.completions.create(
+                    model=GROQ_MODEL_FAST,
+                    messages=[
+                        {"role": "system", "content": system},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.0,
+                    max_tokens=4,
+                    stream=False,
+                )
+
+                raw = (completion.choices[0].message.content or "").strip().lower()
+                for label in ("low", "medium", "high", "urgent"):
+                    if label in raw:
+                        logger.info(f"✓ Priorité ticket classée '{label}' (clé #{attempt + 1})")
+                        return label
+
+            except Exception as e:
+                logger.warning(f"⚠ Clé Groq #{attempt + 1} priorité: {str(e)[:80]}")
+
+        return "medium"
+
     def detect_question(self, message: str) -> bool:
         """Détecte si un message est une question."""
         question_indicators = ['?', 'comment', 'pourquoi', 'quoi', 'qu\'est', 'qui', 'où', 'quand', 'quel',

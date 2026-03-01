@@ -935,3 +935,55 @@ textarea.form-input{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ══════════════════════════════════════════════
+   SETTINGS PAGE LAYOUT
+══════════════════════════════════════════════ */
+
+/* Settings panels occupent toute la largeur disponible */
+.settings-panel { width: 100%; }
+.settings-panel.active { display: block; }
+
+/* Grid 2 colonnes pour les panels settings — s'étire sur toute la largeur */
+.settings-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+  align-items: start;  /* cards de hauteurs différentes restent en haut */
+}
+
+/* Sur les panels settings, les cards prennent toute la hauteur */
+.settings-grid-2 > .card {
+  height: 100%;
+  max-width: none;
+}
+
+/* Panel AI custom : card pleine largeur */
+[data-settings-panel="ai"] .card {
+  width: 100%;
+  max-width: none;
+}
+
+/* Correction: le grid-2 dans general settings aussi */
+[data-settings-panel="general"] .grid-2 {
+  max-width: none;
+  width: 100%;
+}
+
+/* Settings tabs - pas de max-width */
+.settings-tabs {
+  max-width: none;
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .settings-grid-2 { grid-template-columns: 1fr; }
+}
+
+/* Page settings — pas de max-width sur les éléments enfants */
+#page-settings .card,
+#page-settings .grid-2,
+#page-settings .settings-grid-2 {
+  max-width: none;
+}

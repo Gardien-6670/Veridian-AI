@@ -64,6 +64,36 @@ def _embed_color(raw: str | None) -> discord.Color:
 class TicketsCog(commands.Cog):
     """Tickets de support avec traduction en temps reel."""
 
+    @staticmethod
+    def _dominant_language_from_history(ticket_id: int, author_id: int | None = None) -> str | None:
+        """
+        Essaie de déduire une langue stable à partir de l'historique
+        des messages du ticket pour limiter les faux positifs de détection.
+        """
+        try:
+            msgs = TicketMessageModel.get_by_ticket(ticket_id)
+        except Exception:
+            return None
+
+        counts: dict[str, int] = {}
+        for m in msgs or []:
+            if author_id is not None:
+                try:
+                    if int(m.get("author_id") or 0) != int(author_id):
+                        continue
+                except Exception:
+                    continue
+            lang = (m.get("original_language") or "").strip().lower()
+            if not lang or lang in {"auto", "und"}:
+                continue
+            counts[lang] = counts.get(lang, 0) + 1
+
+        if not counts:
+            return None
+
+        # Retourne la langue la plus fréquente.
+        return max(counts.items(), key=lambda kv: kv[1])[0]
+
     @commands.Cog.listener()
     async def on_interaction(self, interaction: discord.Interaction):
         try:
@@ -88,7 +118,8 @@ class TicketsCog(commands.Cog):
     def _build_ticket_welcome_embed(self, *, ticket_id: int,
                                    user_language: str | None,
                                    staff_language: str | None,
-                                   guild_config: dict | None = None) -> discord.Embed:
+                                   guild_config: dict | None = None,
+                                   priority: str | None = None) -> discord.Embed:
         def fmt_lang(code: str | None, pending_label: str) -> str:
             if not code or code == "auto":
                 return pending_label
@@ -114,6 +145,15 @@ class TicketsCog(commands.Cog):
         embed.add_field(name="Ticket ID", value=f"`{ticket_id}`", inline=True)
         embed.add_field(name="Langue utilisateur", value=f"`{ul}`", inline=True)
         embed.add_field(name="Langue staff", value=f"`{sl}`", inline=True)
+        # Priorité du ticket (bas / moyen / haut / prioritaire)
+        pr_raw = (priority or "medium").strip().lower()
+        pr_label = {
+            "low": "Bas",
+            "medium": "Moyen",
+            "high": "Haut",
+            "urgent": "Prioritaire",
+        }.get(pr_raw, pr_raw or "Moyen")
+        embed.add_field(name="Priorité", value=f"`{pr_label}`", inline=True)
         return embed
 
     async def _try_update_welcome_embed(self, channel: discord.TextChannel, ticket_id: int):
@@ -135,6 +175,7 @@ class TicketsCog(commands.Cog):
                 user_language=ticket.get("user_language"),
                 staff_language=ticket.get("staff_language"),
                 guild_config=guild_config,
+                priority=ticket.get("priority"),
             )
             await welcome_msg.edit(embed=embed, view=TicketCloseView(ticket_id, self.bot))
         except Exception as e:
@@ -166,6 +207,10 @@ class TicketsCog(commands.Cog):
         if is_ticket_user:
             ticket_user_lang = ticket.get("user_language")
             if not ticket_user_lang or ticket_user_lang == "auto":
+                # Si la détection échoue, on tente de se baser sur l'historique du ticket.
+                if not detected_lang:
+                    detected_lang = self._dominant_language_from_history(ticket["id"], message.author.id)
+
                 if detected_lang:
                     TicketModel.update(ticket["id"], user_language=detected_lang)
                     ticket["user_language"] = detected_lang
@@ -230,6 +275,32 @@ class TicketsCog(commands.Cog):
             except Exception as e:
                 logger.warning(f"DB store ticket message failed (ticket {ticket['id']}): {e}")
 
+            # Priorisation automatique du ticket en fonction de la gravité (côté IA).
+            try:
+                msgs = TicketMessageModel.get_by_ticket(ticket["id"])
+                last = msgs[-40:] if msgs else []
+                conversation = [
+                    {
+                        "author": m.get("author_username") or str(m.get("author_id")),
+                        "content": m.get("original_content") or "",
+                    }
+                    for m in last
+                    if (m.get("original_content") or "").strip()
+                ]
+                if conversation:
+                    lang_for_priority = (
+                        ticket.get("user_language")
+                        or detected_lang
+                        or guild_config.get("default_language")
+                        or "en"
+                    )
+                    new_priority = self.groq_client.classify_ticket_priority(conversation, lang_for_priority)
+                    if new_priority and new_priority != ticket.get("priority"):
+                        TicketModel.update(ticket["id"], priority=new_priority)
+                        ticket["priority"] = new_priority
+            except Exception as e:
+                logger.debug(f"Auto-priorite ticket {ticket['id']} ignoree: {e}")
+
             return
 
         # ── Staff (or other participant) message: detect staff language if needed ──
@@ -244,8 +315,8 @@ class TicketsCog(commands.Cog):
                 staff_lang = guild_config.get("default_language") or "en"
 
         # User language might still be pending if the user hasn't typed yet.
-        user_lang = ticket.get("user_language")
-        if not user_lang or user_lang == "auto":
+        user_lang = ticket.get("user_language") if ticket.get("user_language") not in (None, "", "auto") else None
+        if not user_lang:
             user_db = UserModel.get(ticket["user_id"])
             if user_db and user_db.get("preferred_language") not in (None, "", "auto"):
                 user_lang = user_db.get("preferred_language")
@@ -381,11 +452,18 @@ class TicketsCog(commands.Cog):
         # Langue: on attend le premier message de l'utilisateur pour detecter.
         # (Ne pas detecter depuis le pseudo: trop peu fiable)
         user_db = UserModel.get(interaction.user.id)
-        user_language = (
-            user_db.get("preferred_language")
-            if user_db and user_db.get("preferred_language") not in (None, "", "auto")
-            else "auto"
-        )
+        if user_db and user_db.get("preferred_language") not in (None, "", "auto"):
+            user_language = user_db.get("preferred_language")
+        else:
+            # Hint depuis la locale Discord (slash command), ex: fr, en-US…
+            locale = getattr(interaction.user, "locale", None) or getattr(interaction.guild, "preferred_locale", None)
+            code = None
+            if locale:
+                try:
+                    code = str(locale).split("-")[0].lower()
+                except Exception:
+                    code = None
+            user_language = code if code and len(code) == 2 else "auto"
         staff_language = guild_config.get("default_language") or "en"
 
         # Creer en DB avec username
@@ -417,6 +495,7 @@ class TicketsCog(commands.Cog):
             user_language=user_language,
             staff_language=staff_language,
             guild_config=guild_config,
+            priority="medium",
         )
         view = TicketCloseView(ticket_id, self.bot)
         welcome_msg = await ticket_channel.send(embed=embed, view=view)
@@ -465,9 +544,26 @@ class TicketsCog(commands.Cog):
             await interaction.followup.send("Permission refusee.", ephemeral=True)
             return
 
-        # Generer le resume IA si disponible
-        transcript = f"Ticket ferme. Raison : {reason}"
+        # Generer le resume IA si disponible + double embed (staff + client)
+        transcript_staff = f"Ticket ferme. Raison : {reason}"
+        transcript_user = None
+        user_lang = None
+        staff_lang = None
         try:
+            guild_config = GuildModel.get(int(ticket.get("guild_id") or 0)) or {}
+            auto_translate = bool(guild_config.get("auto_translate", 1))
+
+            # Langues
+            user_lang = ticket.get("user_language") if ticket.get("user_language") not in (None, "", "auto") else None
+            if not user_lang:
+                user_db = UserModel.get(ticket["user_id"])
+                if user_db and user_db.get("preferred_language") not in (None, "", "auto"):
+                    user_lang = user_db.get("preferred_language")
+
+            staff_lang = ticket.get("staff_language") or guild_config.get("default_language") or "en"
+            if staff_lang == "auto":
+                staff_lang = guild_config.get("default_language") or "en"
+
             msgs = TicketMessageModel.get_by_ticket(ticket["id"])
             # Limiter pour eviter un prompt trop long.
             last = msgs[-60:] if msgs else []
@@ -475,21 +571,60 @@ class TicketsCog(commands.Cog):
                 {"author": m.get("author_username") or str(m.get("author_id")), "content": m.get("original_content") or ""}
                 for m in last
             ]
-            lang = ticket.get("user_language") or ticket.get("staff_language") or "en"
-            if lang == "auto":
-                lang = ticket.get("staff_language") or "en"
-            transcript = self.groq_client.generate_ticket_summary(conversation, lang)
+            lang_for_summary = staff_lang or user_lang or "en"
+            transcript_staff = self.groq_client.generate_ticket_summary(conversation, lang_for_summary)
+
+            if auto_translate and user_lang and lang_for_summary and user_lang != lang_for_summary:
+                try:
+                    transcript_user, _ = self.translator.translate_response_for_user(
+                        transcript_staff, lang_for_summary, user_lang
+                    )
+                except Exception:
+                    transcript_user = None
         except Exception as e:
             logger.warning(f"Resume IA non genere: {e}")
 
-        TicketModel.close(ticket["id"], transcript=transcript, close_reason=reason)
+        TicketModel.close(ticket["id"], transcript=transcript_staff, close_reason=reason)
+
+        # Envoyer un resume dans le channel (staff + éventuellement client)
+        try:
+            pr_raw = (ticket.get("priority") or "medium").strip().lower()
+            pr_label = {
+                "low": "Bas",
+                "medium": "Moyen",
+                "high": "Haut",
+                "urgent": "Prioritaire",
+            }.get(pr_raw, pr_raw or "Moyen")
+
+            base_embed = discord.Embed(
+                title="Résumé du ticket (staff)",
+                description=transcript_staff or "Aucun résumé généré.",
+                color=discord.Color.greyple(),
+            )
+            base_embed.add_field(name="Priorité", value=f"`{pr_label}`", inline=True)
+            base_embed.add_field(
+                name="Langues",
+                value=f"User: `{(user_lang or 'auto').upper()}` · Staff: `{(staff_lang or 'en').upper()}`",
+                inline=True,
+            )
+            await interaction.channel.send(embed=base_embed)
+
+            if transcript_user and user_lang and user_lang != staff_lang:
+                user_embed = discord.Embed(
+                    title="Résumé du ticket (client)",
+                    description=transcript_user,
+                    color=discord.Color.blurple(),
+                )
+                await interaction.channel.send(embed=user_embed)
+        except Exception as e:
+            logger.debug(f"Envoi resume fermeture commande ignore: {e}")
 
         # Envoyer la transcription en DM
         try:
             user  = await self.bot.fetch_user(ticket["user_id"])
             embed = discord.Embed(
                 title="Resume du ticket",
-                description=transcript,
+                description=transcript_user or transcript_staff,
                 color=discord.Color.greyple()
             )
             await user.send(embed=embed)
@@ -601,6 +736,8 @@ class TicketCloseView(discord.ui.View):
         super().__init__(timeout=None)
         self.ticket_id = ticket_id
         self.bot       = bot
+        self.translator = TranslatorService()
+        self.groq_client = GroqClient()
 
     @discord.ui.button(label="Fermer le ticket", style=discord.ButtonStyle.danger)
     async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -615,23 +752,84 @@ class TicketCloseView(discord.ui.View):
             await interaction.response.send_message("Permission refusee.", ephemeral=True)
             return
 
-        # Resume IA (best-effort)
-        transcript = ""
+        # Résumé IA + priorite + double embed (staff + client) best-effort
+        summary_staff = ""
+        summary_user = None
+        user_lang = None
+        staff_lang = None
         try:
+            guild_config = GuildModel.get(int(ticket.get("guild_id") or 0)) or {}
+            auto_translate = bool(guild_config.get("auto_translate", 1))
+
+            # Langues
+            user_lang = ticket.get("user_language") if ticket.get("user_language") not in (None, "", "auto") else None
+            if not user_lang:
+                user_db = UserModel.get(ticket.get("user_id"))
+                if user_db and user_db.get("preferred_language") not in (None, "", "auto"):
+                    user_lang = user_db.get("preferred_language")
+
+            staff_lang = ticket.get("staff_language") or guild_config.get("default_language") or "en"
+            if staff_lang == "auto":
+                staff_lang = guild_config.get("default_language") or "en"
+
             msgs = TicketMessageModel.get_by_ticket(self.ticket_id)
             last = msgs[-60:] if msgs else []
             conversation = [
                 {"author": m.get("author_username") or str(m.get("author_id")), "content": m.get("original_content") or ""}
                 for m in last
+                if (m.get("original_content") or "").strip()
             ]
-            lang = ticket.get("user_language") or ticket.get("staff_language") or "en"
-            if lang == "auto":
-                lang = ticket.get("staff_language") or "en"
-            transcript = GroqClient().generate_ticket_summary(conversation, lang)
-        except Exception:
-            transcript = ""
+            lang_for_summary = staff_lang or user_lang or "en"
+            summary_staff = self.groq_client.generate_ticket_summary(conversation, lang_for_summary)
 
-        TicketModel.close(self.ticket_id, transcript=transcript, close_reason="Ferme via bouton")
+            if auto_translate and user_lang and lang_for_summary and user_lang != lang_for_summary:
+                try:
+                    summary_user, _ = self.translator.translate_response_for_user(
+                        summary_staff, lang_for_summary, user_lang
+                    )
+                except Exception:
+                    summary_user = None
+        except Exception as e:
+            logger.warning(f"Resume IA bouton non genere: {e}")
+            summary_staff = ""
+            summary_user = None
+
+        TicketModel.close(self.ticket_id, transcript=summary_staff, close_reason="Ferme via bouton")
+
+        # Envoyer les embeds de resume dans le channel
+        try:
+            pr_raw = (ticket.get("priority") or "medium").strip().lower()
+            pr_label = {
+                "low": "Bas",
+                "medium": "Moyen",
+                "high": "Haut",
+                "urgent": "Prioritaire",
+            }.get(pr_raw, pr_raw or "Moyen")
+
+            base_embed = discord.Embed(
+                title="Résumé du ticket (staff)",
+                description=summary_staff or "Aucun résumé généré.",
+                color=discord.Color.greyple(),
+            )
+            base_embed.add_field(name="Priorité", value=f"`{pr_label}`", inline=True)
+            base_embed.add_field(
+                name="Langues",
+                value=f"User: `{(user_lang or 'auto').upper()}` · Staff: `{(staff_lang or 'en').upper()}`",
+                inline=True,
+            )
+            channel = interaction.channel
+            if isinstance(channel, discord.TextChannel):
+                await channel.send(embed=base_embed)
+
+                if summary_user and user_lang and user_lang != staff_lang:
+                    user_embed = discord.Embed(
+                        title="Résumé du ticket (client)",
+                        description=summary_user,
+                        color=discord.Color.blurple(),
+                    )
+                    await channel.send(embed=user_embed)
+        except Exception as e:
+            logger.debug(f"Envoi resume fermeture bouton ignore: {e}")
         button.disabled = True
         await interaction.response.edit_message(
             content="Ticket ferme.", view=self

@@ -37,7 +37,8 @@
     </div>
     <div id="transcript-content" style="padding:20px;overflow-y:auto;font-size:12.5px;line-height:1.7;color:var(--text2);white-space:pre-wrap;font-family:'Space Mono',monospace;flex:1"></div>
     <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px">
-      <button class="btn btn-ghost btn-sm" data-action="close-transcript" data-i18n="dash_close">Fermer</button>
+      <button class="btn btn-ghost btn-sm" data-action="export-transcript-pdf" type="button">Exporter en PDF</button>
+      <button class="btn btn-ghost btn-sm" data-action="close-transcript" data-i18n="dash_close" type="button">Fermer</button>
     </div>
   </div>
 </div>
@@ -65,7 +66,7 @@
 <!-- ══ BETA BANNER ══════════════════════════════════════ -->
 <div class="beta-banner">
   <span class="beta-pill" data-i18n="dash_beta">BETA</span>
-  <span data-i18n="hero_badge">0.0.1 — Version en cours de développement · 2026</span>
+  <span data-i18n="hero_badge">0.1.0 — Version en cours de développement · 2026</span>
   <a href="#"><span data-i18n="dash_beta_link">Signaler un problème sur Discord</span> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true" style="vertical-align:-2px;margin-left:4px;opacity:.8">
       <path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       <path d="M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -359,6 +360,7 @@
                 <th>ID</th>
                 <th data-i18n="dash_user">Utilisateur</th>
                 <th data-i18n="dash_status">Statut</th>
+                <th>Priorité</th>
                 <th data-i18n="dash_language">Langue</th>
                 <th data-i18n="dash_assigned_to">Assigné à</th>
                 <th data-i18n="dash_opened_on">Ouvert le</th>
@@ -366,7 +368,7 @@
               </tr>
             </thead>
             <tbody id="tickets-tbody">
-              <tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px" data-i18n="dash_select_server_tickets">Sélectionnez un serveur pour voir les tickets</td></tr>
+              <tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px" data-i18n="dash_select_server_tickets">Sélectionnez un serveur pour voir les tickets</td></tr>
             </tbody>
           </table>
         </div>
@@ -606,16 +608,13 @@
             </div>
           </div>
         </div>
-          </div>
-        </div>
-      </div>
 
-      </div><!-- /.grid-2 -->
+        </div><!-- /.grid-2 -->
       </div><!-- /.settings-panel general -->
 
       <!-- Tickets panel -->
       <div class="settings-panel" data-settings-panel="tickets">
-        <div class="grid-2">
+        <div class="settings-grid-2">
           <div class="card">
             <div class="card-header">
               <div class="card-title"><div class="card-dot"></div><span>Ouverture des tickets</span></div>
@@ -727,7 +726,7 @@
               </div>
             </div>
           </div>
-        </div>
+        </div><!-- /.settings-grid-2 -->
       </div><!-- /.settings-panel tickets -->
 
       <!-- AI custom panel -->
